@@ -1,0 +1,765 @@
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(1,SIZE) BROWSE INCDIR(..\3126) DEBUG OBJECTEXTEND PRINT(.\L
+                    -istings\main.lst) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "Timer.h"
+   3          #include "UART0.h"
+   4          #include "WDT.h"
+   5          #include "ADC.h"
+   6          
+   7          // 本代码为CRM3126电源主要代码
+   8          //******************************************************
+   9          //AD0--->P04-->AN0  模拟信号输入   NTC1  检测蒸汽煲温度 使用
+  10          //AD1--->P05-->AN1  模拟信号输入   NTC2 检测咖啡温度
+  11          //AD2--->P06-->AN2  模拟信号输入   NTC3
+  12          //AD3--->P07-->AN3  模拟信号输入   SHUI  检测有水无水 使用
+  13          //PRS--->P17-->IN I/O 开关信号输入 PRS   压力开关输入
+  14          //WLS--->P02-->IN I/O 水位信号输入 WLS   水位开关输入    使用 检测外部水箱是否有水
+  15          //POS--->P00-->IN I/O 电源信号输入 POS   电源开关输入    使用
+  16          //CS---->P03-->IN I/O 咖啡信号输入 CS    咖啡开关输入    使用
+  17          //PLUS-->P35-->IN   脉冲信号输入   PLUS  流量计信号输入
+  18          //LAMP-->P24-->OUT  控制输出       LAMP  控制信号输出
+  19          //SCL--->P26
+  20          //SDA--->P25
+  21          
+  22          //PWM--->P16-->OUT  可控硅1输出
+  23          //CT2--->P01-->OUT  可控硅2输出     使用
+  24          //CK1--->P10-->OUT   备用输出
+  25          //CK2--->P11-->OUT   咖啡进水电磁阀   使用  E-CI
+  26          //CK3--->P23-->OUT   咖啡出水电磁阀
+  27          //CK4--->P30-->OUT   热水电磁阀
+  28          //CK5--->P31-->OUT   蒸汽进水电磁阀  使用 E-HW
+  29          //CK6--->P32-->OUT   水泵开关        使用WP
+  30          //BUZ--->P33-->OUT   蜂鸣器
+  31          //TXD--->P14-->OUT   RS232 TXD
+  32          //RXD--->P15-->IN    RS232 RXD
+  33          //******************************************************
+  34          
+  35          #define PRS             P1_7   //读取压力开关
+  36          #define WLS             P0_2   //检测外部水箱是否有水
+  37          #define POS     P0_0   //电源信号输入
+  38          #define CS      P0_3   //咖啡信号输入
+  39          #define PLUS    P3_5   //读取流量计
+  40          //******************************************************************
+  41          #define CS1     P1_2
+  42          #define LAMP    P2_4
+  43          #define PWM     P1_6  //咖啡杯加热
+  44          #define CT2     P0_1  //蒸汽加热
+  45          
+  46          #define CK1     P1_0  //备用输出
+  47          #define CK2     P1_1  //咖啡进水电磁阀  
+  48          #define CK3     P2_3  //咖啡出水电磁阀
+  49          #define CK4     P3_0  //热水电磁阀
+  50          #define CK5     P3_1  //蒸汽进水电磁阀
+  51          #define CK6     P3_2  //水泵开关
+  52          
+  53          #define RXD             P1_5//串口输入
+  54          #define TXD             P1_4//串口输出
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 2   
+
+  55          #define SDA             P2_5
+  56          #define SCL             P2_6
+  57          #define M_SDA   P3_4
+  58          #define M_SCK   P1_3
+  59          
+  60          #define BUZ     P3_3
+  61          //波特率9600
+  62          //设置参数
+  63          //1)开机时显示屏显示NTC实际温度，按SET按键一次，“PXX”闪烁，通过“+/-”来调整预浸泡时间(XX:表示预浸泡时间
+             -,
+  64          //  调节范围：00-30,表示预浸泡时间调节范围0-30秒)
+  65          //2)再按一下SET按键,数字显示锅炉温度,通过“+/-”调整温度.调节范围：80-135℃.再按SET按键，
+  66          //  "ECX"闪烁(ECX表示休眠时间,ECX调节范围:EC1-EC5),通过”+/-”可以选择EC1(时间为28min).EC2(
+  67          //  时间为60min).EC3(时间为90min).EC4(时间为180min)以及EC5(关闭节能模式)
+  68          //3)再按SET按键,正式进入工作状态,做咖啡时,显示屏数字表示做咖啡的时间.
+  69          //4)当机器进入节能模式，显示屏显示ECO(所有用电器停止工作),按一次SET按键,显示锅炉温度,再
+  70          //   按一次SET按键,重复上述的1.2.3 点让机器再次工作.
+  71          //5) 默认设置：P02/125/EC1。
+  72          //通讯协议
+  73          // 1B 2A  表示包头
+  74          // dir    表示方向 0x01表示电源板主机向上发送 0x02 表示显示屏向下发送
+  75          // cmd    表示指令
+  76          // data1  表示参数1
+  77          // data2  表示参数2
+  78          // checkSum1  校验码1
+  79          // checkSum2  校验码2
+  80          
+  81          //返回指令
+  82          //1B 2A   表示包头
+  83          //dir     表示方向
+  84          //cmd     表示收到指令
+  85          //data1   表示之前参数
+  86          //data2    正确或者错误 0x01表示正确  0x02表示错误
+  87          // checkSum1  校验码1
+  88          // checkSum2  校验码2
+  89          #define  ESC_01                 0x1B
+  90          #define  ESC_02                 0x2A
+  91          
+  92          //**********************************************************
+  93          #define  CMD_CTMP               0x01  //读取咖啡煲温度(NTC)
+  94          #define  CMD_ZTMP               0x02  //读取蒸汽煲温度(NTC)
+  95          #define  CMD_SHUI       0x03  //读取水位
+  96          #define  CMD_LIU        0x04  //读取流量 
+  97          #define  CMD_COFE       0x05  //读取咖啡按键 
+  98          #define  CMD_SHXI       0x06  //读取水箱状态
+  99          #define  CMD_POP        0x07  //表示压力开关状态
+ 100          #define  CMD_MS         0x08  //获取蒸汽开关
+ 101          #define  CMD_STEMTMP    0x09  //获取蒸汽温度(热电偶)
+ 102          
+ 103          //************************************************************
+ 104          #define  CMD_CTBENG     0x10  //表示控制泵抽水           CK6
+ 105          #define  CMD_CTZHEN     0x11  //表示控制蒸汽进水阀       CK5
+ 106          #define  CMD_CTHEAT     0x12  //表示控制出蒸汽电磁阀       CK4 
+ 107          #define  CMD_CTCFE      0x13  //表示控制咖啡出水电磁阀   CK3
+ 108          #define  CMD_CTZSHUI    0x14  //表示控制咖啡进水阀       CK2
+ 109          #define  CMD_BK1                0x15  //表示控制备用             CK1
+ 110          #define  CMD_LAMP       0x16  //灯控制开关               LAMP
+ 111          #define  CMD_CAFEH      0x17  //控制咖啡煲加热           PWM
+ 112          #define  CMD_ZHENH      0x18  //控制蒸气煲加热           CT2
+ 113          
+ 114          #define  CMD_BUZ        0x19  //控制蜂鸣器
+ 115          #define  CMD_SLEEP      0x1A  //表示控制休眠
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 3   
+
+ 116          #define  CMD_PWR        0x20  //电源开关
+ 117          //***********************************************************
+ 118          
+ 119          
+ 120          #define  P_TO_DIS   0x01 //电源板主机向上发送
+ 121          #define  DIS_TO_P   0x02 //表示显示板向电源板发送
+ 122          #define  CMD_OK     0xAA //表示收到指令成功
+ 123          #define  CMD_FAIL   0x55 //表示失败
+ 124          
+ 125          #define JP_DEAFE    1
+ 126          #define CAF_TEM     102
+ 127          #define DUCUP       40
+ 128          #define SINGCUP     25
+ 129          #define HEATT       5
+ 130          
+ 131          #define  AD_CH0    0x00
+ 132          #define  AD_CH1    0x01
+ 133          #define  AD_CH3    0x03
+ 134          
+ 135          unsigned char   xdata   SenTemp=0;//蒸汽温度热电偶
+ 136          unsigned char   xdata   ErrCode=0;//错误代码
+ 137          unsigned long   xdata   TimeCc=0;//状态机计时
+ 138          unsigned int    xdata   BuzTime=0;//蜂鸣器响多少次
+ 139          unsigned int    xdata   LiuLiangC=0;//流量计数
+ 140          unsigned char   xdata   RetOK=0;
+ 141          unsigned char   xdata   ShuiXFlag=0;//0x00表示无水 0x01表示有水
+ 142          unsigned char   xdata   PowerFlag=0;//电源标志
+ 143          unsigned char   xdata   CaffeFlag=0;//咖啡按键标志
+ 144          unsigned char   xdata   PushFlag=0;//压力传感器标志
+ 145          unsigned char   xdata   ShuiFlag=0;//水位控针
+ 146          unsigned char  CafeTmp=0;
+ 147          unsigned char  ZhenQiTmp=0;
+ 148          unsigned char   LiuH=0;
+ 149          unsigned char   LiuL=0;
+ 150          
+ 151          
+ 152          //**********************************************
+ 153          
+ 154          //系统关机状态
+ 155          //系统自检状态 全部数码管常1秒 检测NTC1 NTC2开路 短路 温度小于-1或者大于170
+ 156          //水泵上水8秒
+ 157          //
+ 158          //休眠状态
+ 159          //系统硬件错误
+ 160          //数码管显示NTC1 开路显示E-1 短路显示E-2 <-1度显示E-3 >170度显示E-4
+ 161          //数码管显示NTC2 开路显示E-5 短路显示E-6 <-1度显示E-7 >170度显示E-8
+ 162          //1.关机状态 显示EC0
+ 163          //2.系统自检  检查两个NTC是否开断 短路
+ 164          //3.泵水8秒钟 停止进入下一级处理
+ 165          //以下正常工作状态
+ 166          //4.发热煲开始加热 蒸汽煲开始加热工作
+ 167          //5.判断蒸汽煲温度是否达到138度 达到
+ 168          //6.发热煲是否达到设定温度值 进行PID控制计算
+ 169          //7.热水、手动、自动、蒸汽同一时间只能单独一个可以工作
+ 170          
+ 171          
+ 172          
+ 173          extern  void    delay(unsigned int n);
+ 174          
+ 175          #define         isr_push_sfr    {_push_(        INSCON );INSCON = 0;_push_( FLASHCON ); FLASHCON = 0; }
+ 176          #define         isr_pop_sfr             {INSCON = 0;_pop_(  FLASHCON );_pop_(   INSCON );}
+ 177          
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 4   
+
+ 178          
+ 179          typedef bit                             Bit;
+ 180          typedef bit                             Bool;
+ 181          typedef unsigned char   Byte;
+ 182          typedef unsigned int    Word;
+ 183          typedef unsigned long   Dword;
+ 184          
+ 185          
+ 186          #define MAKEWORD(v1,v2) (((Word)(v1)<<8) + (Word)(v2))
+ 187          #define HIBYTE(v1)              ((Byte)((v1)>>8))
+ 188          #define LOBYTE(v1)              ((Byte)((v1)&0xff))
+ 189          
+ 190          
+ 191          unsigned char   EppVal[8];
+ 192          extern void WriteFlash(Byte *ptr);
+ 193          extern void     Flash_Of_CtrlPara(void);
+ 194          extern void ReadFlash(Byte *ptr);
+ 195          void ConfineSleepTime(void);
+ 196          void BuzCtr(void);
+ 197          void UART_TXD_Process(unsigned char cmd,unsigned char parm1,unsigned char parm2);
+ 198          unsigned char GetBufSize(void);
+ 199          unsigned char GetBufData(void);
+ 200          unsigned char GetTempVal(unsigned char  chanel);
+ 201          unsigned char GetShuiLevel(void);
+ 202          void PowerSleep(void);
+ 203          void BengCtr(unsigned char ctr);
+ 204          unsigned char ReadStemTmp(void);
+ 205          
+ 206          bit     gbFlag1ms;
+ 207          void delay(unsigned int tim)
+ 208          {
+ 209   1          unsigned int  i,j;
+ 210   1          for (i=0; i<tim; i++)
+ 211   1              for (j=0; j<100; j++)
+ 212   1              {
+ 213   2      
+ 214   2              }
+ 215   1      }
+ 216          void delayus(unsigned int tim)
+ 217          {
+ 218   1          unsigned int i,j;
+ 219   1          for(i=0; i<tim; i++)
+ 220   1          {
+ 221   2              for(j=0; j<2; j++)
+ 222   2              {
+ 223   3      
+ 224   3              }
+ 225   2          }
+ 226   1      }
+ 227          void delayNP(unsigned int tim)
+ 228          {
+ 229   1          unsigned int  i,j;
+ 230   1          for (i=0; i<tim; i++)
+ 231   1          {
+ 232   2              for (j=0; j<10; j++);
+ 233   2          }
+ 234   1      }
+ 235          //===============================================================================================
+ 236          //                                                                      1ms中断
+ 237          //                                                              -----------------------------------------
+ 238          //===============================================================================================
+ 239          void BuzCtr(void)
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 5   
+
+ 240          {
+ 241   1          unsigned int xdata BuzTA=0;
+ 242   1          if(BuzTime>0)
+ 243   1          {
+ 244   2              for(BuzTA=0; BuzTA<BuzTime; BuzTA++)
+ 245   2              {
+ 246   3                  BUZ=0;
+ 247   3                  delayus(10);
+ 248   3                  BUZ=1;
+ 249   3                  delayus(10);
+ 250   3              }
+ 251   2              BuzTime=0;
+ 252   2          }
+ 253   1      }
+ 254          void BengCtr(unsigned char ctr)
+ 255          {
+ 256   1          unsigned int xdata BuzTA=0;
+ 257   1          if(ctr==1)
+ 258   1          {
+ 259   2              CK6=1;
+ 260   2          }
+ 261   1          else
+ 262   1          {
+ 263   2              CK6=0;
+ 264   2          }
+ 265   1      }
+ 266          
+ 267          
+ 268          //PXM1    PXM0
+ 269          // 0            0       准双向
+ 270          // 0            1       推挽
+ 271          // 1            0       只输入
+ 272          // 1            1       开漏
+ 273          
+ 274          void Init_GPIO(void)
+ 275          {
+ 276   1          P0 = 0x00;
+ 277   1          P1 = 0x00;
+ 278   1          P2 = 0x00;
+ 279   1          P3 = 0x00;
+ 280   1      //P0.0-->POS    -->电源输入
+ 281   1      //P0.1-->CT2    -->蒸汽加热
+ 282   1      //P0.2-->WLS    -->检测外部水箱是否有水
+ 283   1      //P0.3-->CS             -->咖啡信号输入
+ 284   1      //P0.4-->AD0    -->模拟信号输入 检测蒸汽煲温度
+ 285   1      //P0.5-->AD1    -->模拟信号输入
+ 286   1      //P0.6-->AD2    -->模拟信号输入
+ 287   1      //P0.7-->AD3    -->模拟信号输入 检测有无水
+ 288   1          P0M1 = 0xF0;
+ 289   1          P0M0 = 0x02;
+ 290   1      
+ 291   1      //P1.0-->CK1    -->备用输出
+ 292   1      //P1.1-->CK2    -->咖啡进水电磁阀
+ 293   1      //P1.2-->SLEEP  -->
+ 294   1      //P1.3-->AC_C   -->SCK1
+ 295   1      //P1.4-->TXD    -->
+ 296   1      //P1.5-->RXD    -->
+ 297   1      //P1.6-->PWM    -->咖啡杯加热
+ 298   1      //P1.7-->PRS    -->读取压力开关
+ 299   1          P1M1 = 0x00;
+ 300   1          P1M0 = 0x4F;
+ 301   1      
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 6   
+
+ 302   1      //P2.3-->CK3    -->咖啡出水电磁阀
+ 303   1      //P2.4-->LAMP   -->
+ 304   1      //P2.5-->SDA    -->
+ 305   1      //P2.6-->SCL    -->
+ 306   1          P2M1 = 0x00;
+ 307   1          P2M0 = 0x18;
+ 308   1      
+ 309   1      //P3.0-->CK4    -->热水电磁阀
+ 310   1      //P3.1-->CK5    -->蒸汽进水电磁阀
+ 311   1      //P3.2-->CK6    -->水泵开关
+ 312   1      //P3.3-->BUZ    -->蜂鸣器
+ 313   1      //P3.4-->SDA1
+ 314   1      //P3.5-->PLUS   -->读取流量计
+ 315   1          P3M1 = 0x20;
+ 316   1          P3M0 = 0x0F;
+ 317   1      
+ 318   1          RXD=1;
+ 319   1          TXD=1;
+ 320   1          SCL=1;
+ 321   1          SDA=1;
+ 322   1          M_SDA=1;
+ 323   1          M_SCK=1;
+ 324   1          LAMP=0;
+ 325   1          PowerSleep();
+ 326   1      }
+ 327          
+ 328          void GetPowerKey(void)
+ 329          {
+ 330   1          static unsigned char ButL=0,ButH=0;
+ 331   1          POS=1;
+ 332   1          if((POS==0)&&(PowerFlag==0x00))
+ 333   1          {
+ 334   2              ButL++;
+ 335   2              if(ButL>30)
+ 336   2              {
+ 337   3                  LAMP=1;//开灯
+ 338   3                  PowerFlag=0xAA;
+ 339   3              }
+ 340   2          }
+ 341   1          else if(POS==1)
+ 342   1          {
+ 343   2              ButL=0;
+ 344   2              ButH++;
+ 345   2              if((PowerFlag==0xAA)&&(ButH>30))
+ 346   2              {
+ 347   3                  LAMP=0;//关灯
+ 348   3                  PowerFlag=0x00;
+ 349   3              }
+ 350   2          }
+ 351   1      }
+ 352          
+ 353          void GetCofeKey(void)
+ 354          {
+ 355   1          static unsigned char ButL=0,ButH=0;
+ 356   1          CS=1;
+ 357   1          if((CS==0)&&(CaffeFlag==0x00))
+ 358   1          {
+ 359   2              ButL++;
+ 360   2              if(ButL>30)
+ 361   2              {
+ 362   3                  CaffeFlag=0xAA;
+ 363   3              }
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 7   
+
+ 364   2          }
+ 365   1          else        if(CS==1)
+ 366   1          {
+ 367   2              ButL=0;
+ 368   2              ButH++;
+ 369   2              if((CaffeFlag==0xAA)&&(ButH>30))
+ 370   2              {
+ 371   3                  CaffeFlag=0x00;
+ 372   3              }
+ 373   2          }
+ 374   1      }
+ 375          
+ 376          void GetPopKey(void)
+ 377          {
+ 378   1          static unsigned char ButL=0,ButH=0;
+ 379   1          PRS=1;
+ 380   1          if(PRS==1)//
+ 381   1          {
+ 382   2              ButH++;
+ 383   2              if(ButH>50)
+ 384   2              {
+ 385   3                  PushFlag=0xAA;
+ 386   3                  ButH=0;
+ 387   3              }
+ 388   2          }
+ 389   1          else
+ 390   1          {
+ 391   2              ButH=0;
+ 392   2              ButL++;
+ 393   2              if(ButL>50)
+ 394   2              {
+ 395   3                  PushFlag=0x00;
+ 396   3              }
+ 397   2          }
+ 398   1      }
+ 399          
+ 400          //===============================================================================================
+ 401          //功能:串口     (9600bps)
+ 402          //===============================================================================================
+ 403          
+ 404          void UART_TXD_Process(unsigned char Cmd,unsigned char Parm1,unsigned char Parm2)
+ 405          {
+ 406   1          unsigned short CheckSum=0;
+ 407   1          BufSizeClear();
+ 408   1          UART0_TX(ESC_01);
+ 409   1          UART0_TX(ESC_02);
+ 410   1          UART0_TX(P_TO_DIS);
+ 411   1          UART0_TX(Cmd);
+ 412   1          UART0_TX(Parm1);
+ 413   1          UART0_TX(Parm2);
+ 414   1          CheckSum=ESC_01+ESC_02+P_TO_DIS+Cmd+Parm1+Parm2;
+ 415   1          UART0_TX((CheckSum>>8)&0xFF);
+ 416   1          UART0_TX(CheckSum&0xFF);
+ 417   1      }
+ 418          
+ 419          
+ 420          void  UART_Rxd_Process(void)//处理显示相关指令
+ 421          {
+ 422   1          unsigned char xdata pcmd=0,sdata1=0,sdata2=0,schecksum1,schecksum2;
+ 423   1          unsigned short CheckSumDIS,CheckSumPo;
+ 424   1          if(GetBufSize()>=8)
+ 425   1          {
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 8   
+
+ 426   2              if(GetBufData()==ESC_01)//读取0x1B
+ 427   2              {
+ 428   3                  if(GetBufData()==ESC_02)//读取0x2A
+ 429   3                  {
+ 430   4                      if(GetBufData()==DIS_TO_P)//0x02 表示显示屏到电源板指令
+ 431   4                      {
+ 432   5                          pcmd=GetBufData();
+ 433   5                          sdata1=GetBufData();
+ 434   5                          sdata2=GetBufData();
+ 435   5                          schecksum1=GetBufData();
+ 436   5                          schecksum2=GetBufData();
+ 437   5                          CheckSumDIS=(schecksum1<<8)+schecksum2;
+ 438   5                          CheckSumPo=ESC_01+ESC_02+DIS_TO_P+pcmd+sdata1+sdata2;
+ 439   5                          if(CheckSumPo==CheckSumDIS)
+ 440   5                          {
+ 441   6                              switch(pcmd)
+ 442   6                              {
+ 443   7                              case  CMD_CTMP://读取咖啡煲温度
+ 444   7                                  CafeTmp=GetCafeTmp();//咖啡煲温度
+ 445   7                                  UART_TXD_Process(CMD_CTMP,CafeTmp,0x00);
+ 446   7                                  break;
+ 447   7                              case CMD_ZTMP://读取蒸汽煲温度
+ 448   7                                  ZhenQiTmp=GetZhenQiTmp();//咖啡煲温度
+ 449   7                                  UART_TXD_Process(CMD_ZTMP,ZhenQiTmp,0x00);
+ 450   7                                  break;
+ 451   7                              case CMD_STEMTMP://获取蒸汽温度热电偶
+ 452   7                                  SenTemp=ReadStemTmp();
+ 453   7                                  UART_TXD_Process(CMD_STEMTMP,SenTemp,0x00);
+ 454   7                                  break;
+ 455   7                              case CMD_SHUI://读取水位
+ 456   7                                  ShuiFlag=GetShuiLevel();
+ 457   7                                  UART_TXD_Process(CMD_SHUI,ShuiFlag,0x00);
+ 458   7                                  break;
+ 459   7                              case CMD_LIU://读取流量
+ 460   7                                  if(sdata1==0)
+ 461   7                                  {
+ 462   8                                      LiuH=TH1;
+ 463   8                                      LiuL=TL1;
+ 464   8                                      UART_TXD_Process(CMD_LIU,LiuH,LiuL);
+ 465   8                                  }
+ 466   7                                  else
+ 467   7                                  {
+ 468   8                                      LiuH=TH1;
+ 469   8                                      LiuL=TL1;
+ 470   8                                      UART_TXD_Process(CMD_LIU,LiuH,LiuL);
+ 471   8                                      TH1=0;
+ 472   8                                      TL1=0;
+ 473   8                                  }
+ 474   7                                  break;
+ 475   7                              case CMD_COFE://咖啡按键
+ 476   7                                  UART_TXD_Process(CMD_COFE,CaffeFlag,0x00);
+ 477   7                                  break;
+ 478   7                              case CMD_PWR://确认收到电源开关
+ 479   7                                  UART_TXD_Process(CMD_PWR,PowerFlag,0x00);
+ 480   7                                  break;
+ 481   7                              case CMD_POP://读取压力传感器是否闭合
+ 482   7                                  UART_TXD_Process(CMD_POP,PushFlag,0x00);
+ 483   7                                  break;
+ 484   7                              case CMD_CTBENG://表示控制泵抽水           CK6
+ 485   7                                  if(sdata1==1)
+ 486   7                                  {
+ 487   8                                      BengCtr(0x01);
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 9   
+
+ 488   8                                  }
+ 489   7                                  else
+ 490   7                                  {
+ 491   8                                      BengCtr(0x00);
+ 492   8                                  }
+ 493   7                                  UART_TXD_Process(CMD_CTBENG,0x00,0x00);
+ 494   7                                  break;
+ 495   7                              case CMD_CTZHEN://表示控制蒸汽进水阀       CK5
+ 496   7                                  if(sdata1==1)
+ 497   7                                  {
+ 498   8                                      CK5=1;
+ 499   8                                  }
+ 500   7                                  else
+ 501   7                                  {
+ 502   8                                      CK5=0;
+ 503   8                                  }
+ 504   7                                  UART_TXD_Process(CMD_CTZHEN,0x00,0x00);
+ 505   7                                  break;
+ 506   7                              case CMD_CTHEAT://表示控制蒸汽电磁阀(热水改)      CK4
+ 507   7                                  if(sdata1==1)
+ 508   7                                  {
+ 509   8                                      CK4=1;
+ 510   8                                  }
+ 511   7                                  else
+ 512   7                                  {
+ 513   8                                      CK4=0;
+ 514   8                                  }
+ 515   7                                  UART_TXD_Process(CMD_CTHEAT,0x00,0x00);
+ 516   7                                  break;
+ 517   7                              case CMD_CTCFE://表示控制咖啡出水电磁阀    CK3
+ 518   7                                  if(sdata1==1)
+ 519   7                                  {
+ 520   8                                      CK3=1;
+ 521   8                                  }
+ 522   7                                  else
+ 523   7                                  {
+ 524   8                                      CK3=0;
+ 525   8                                  }
+ 526   7                                  UART_TXD_Process(CMD_CTCFE,0x00,0x00);
+ 527   7                                  break;
+ 528   7                              case CMD_CTZSHUI://表示控制咖啡进水阀       CK2
+ 529   7                                  if(sdata1==1)
+ 530   7                                  {
+ 531   8                                      CK2=1;
+ 532   8                                  }
+ 533   7                                  else
+ 534   7                                  {
+ 535   8                                      CK2=0;
+ 536   8                                  }
+ 537   7                                  UART_TXD_Process(CMD_CTZSHUI,0x00,0x00);
+ 538   7                                  break;
+ 539   7                              case CMD_BK1://表示控制备用             CK1
+ 540   7                                  if(sdata1==1)
+ 541   7                                  {
+ 542   8                                      CK1=1;
+ 543   8                                  }
+ 544   7                                  else
+ 545   7                                  {
+ 546   8                                      CK1=0;
+ 547   8                                  }
+ 548   7                                  UART_TXD_Process(CMD_BK1,0x00,0x00);
+ 549   7                                  break;
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 10  
+
+ 550   7                              case CMD_LAMP://灯控制开关
+ 551   7                                  if(sdata1==1)
+ 552   7                                  {
+ 553   8                                      LAMP=1;
+ 554   8                                  }
+ 555   7                                  else
+ 556   7                                  {
+ 557   8                                      LAMP=0;
+ 558   8                                  }
+ 559   7                                  UART_TXD_Process(CMD_LAMP,0x00,0x00);
+ 560   7                                  break;
+ 561   7                              case CMD_BUZ://蜂鸣器
+ 562   7                                  if(sdata1==1)
+ 563   7                                  {
+ 564   8                                      BuzTime=500;
+ 565   8                                  }
+ 566   7                                  else if(sdata1==2)
+ 567   7                                  {
+ 568   8                                      BuzTime=1000;
+ 569   8                                  }
+ 570   7                                  else if(sdata1==3)
+ 571   7                                  {
+ 572   8                                      BuzTime=5000;
+ 573   8                                  }
+ 574   7                                  UART_TXD_Process(CMD_BUZ,0x00,0x00);
+ 575   7                                  break;
+ 576   7      //                        case CMD_SLEEP://休眠模式
+ 577   7      //                            if(sdata1==1)
+ 578   7      //                            {
+ 579   7      //                                PowerSleep();
+ 580   7      //                            }
+ 581   7      //                            else
+ 582   7      //                            {
+ 583   7      //                                SLEEP=1;//取消休眠
+ 584   7      //                            }
+ 585   7      //                            UART_TXD_Process(CMD_SLEEP,0x00,0x00);
+ 586   7      //                            break;
+ 587   7                              case CMD_CAFEH://咖啡煲加热
+ 588   7                                  if(sdata1==1)
+ 589   7                                  {
+ 590   8                                      PWM=1;
+ 591   8                                  }
+ 592   7                                  else
+ 593   7                                  {
+ 594   8                                      PWM=0;//
+ 595   8                                  }
+ 596   7                                  UART_TXD_Process(CMD_CAFEH,0x00,0x00);
+ 597   7                                  break;
+ 598   7                              case CMD_ZHENH://蒸汽煲加热
+ 599   7                                  if(sdata1==1)
+ 600   7                                  {
+ 601   8                                      CT2=1;
+ 602   8                                  }
+ 603   7                                  else
+ 604   7                                  {
+ 605   8                                      CT2=0;//
+ 606   8                                  }
+ 607   7                                  UART_TXD_Process(CMD_ZHENH,0x00,0x00);
+ 608   7                                  break;
+ 609   7                              case CMD_SHXI://水箱状态
+ 610   7                                  UART_TXD_Process(CMD_SHXI,ShuiXFlag,0x00);
+ 611   7                                  break;
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 11  
+
+ 612   7                              default:
+ 613   7                                  break;
+ 614   7                              }
+ 615   6                          }
+ 616   5                      }
+ 617   4                  }
+ 618   3              }
+ 619   2          }
+ 620   1      }
+ 621          
+ 622          void ShuiWLS(void)
+ 623          {
+ 624   1          static unsigned char ShH=0;
+ 625   1          static unsigned char ShL=0;
+ 626   1          WLS=1;
+ 627   1          if(WLS==1)//
+ 628   1          {
+ 629   2              ShH++;
+ 630   2              if(ShH>50)
+ 631   2              {
+ 632   3                  ShuiXFlag=0x00;//表示无水
+ 633   3                  ShH=0;
+ 634   3              }
+ 635   2          }
+ 636   1          else
+ 637   1          {
+ 638   2              ShH=0;
+ 639   2              ShL++;
+ 640   2              if(ShL>50)
+ 641   2              {
+ 642   3                  ShuiXFlag=0x01;//表示有水
+ 643   3              }
+ 644   2          }
+ 645   1      }
+ 646          
+ 647          void PowerSleep(void)
+ 648          {
+ 649   1          PWM=0;
+ 650   1          CT2=0;
+ 651   1          CK1=0;
+ 652   1          CK2=0;
+ 653   1          CK3=0;
+ 654   1          CK4=0;
+ 655   1          CK5=0;
+ 656   1          CK6=0;
+ 657   1          BengCtr(0x00);
+ 658   1          CS1=1;
+ 659   1          PLUS=0;
+ 660   1          BUZ=1;
+ 661   1      
+ 662   1      }
+ 663          #define TMP_OFFSET  6
+ 664          unsigned char ReadStemTmp(void)
+ 665          {
+ 666   1          unsigned char i;
+ 667   1          unsigned int dat;
+ 668   1          i   = 0;
+ 669   1          dat = 0;
+ 670   1          CS1=0;
+ 671   1          M_SCK = 0;
+ 672   1          delayNP(200);
+ 673   1          for(i=0; i<16; i++)         //get D15-D0 from 6675
+C51 COMPILER V9.54   MAIN                                                                  03/18/2021 19:09:40 PAGE 12  
+
+ 674   1          {
+ 675   2              M_SCK = 1;
+ 676   2              delayNP(20);
+ 677   2              dat = dat<<1;
+ 678   2              if(M_SDA==1)
+ 679   2                  dat = dat|0x01;
+ 680   2              M_SCK = 0;
+ 681   2              delayNP(20);
+ 682   2          }
+ 683   1          dat >>=3;
+ 684   1          CS1=1;
+ 685   1          return dat/4-TMP_OFFSET;
+ 686   1      }
+ 687          
+ 688          //===============================================================================================
+ 689          //                                                                      主循环
+ 690          //                                                              -----------------------------------------
+ 691          //===============================================================================================
+ 692          void    main(void)
+ 693          {
+ 694   1          EA =0;                              //关中断
+ 695   1          Init_GPIO();
+ 696   1          init_UART0();
+ 697   1          ADC_Init();
+ 698   1          CafeTmp=GetCafeTmp();
+ 699   1          ZhenQiTmp=GetZhenQiTmp();
+ 700   1          WDTR_Init();
+ 701   1          TIMER1_initialize();
+ 702   1          ReadStemTmp();
+ 703   1          EA =1;
+ 704   1          BuzCtr();
+ 705   1          //主循环
+ 706   1          while(1)
+ 707   1          {
+ 708   2              UART_Rxd_Process();//处理指令
+ 709   2              GetPowerKey();
+ 710   2              BuzCtr();
+ 711   2              ShuiWLS();//实际检测水箱
+ 712   2              GetCofeKey();
+ 713   2              GetPopKey();//检询压力开关
+ 714   2              WDTR_CountClear();
+ 715   2              delay(10);
+ 716   2          }
+ 717   1      }
+ 718          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1584    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     25    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     51    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

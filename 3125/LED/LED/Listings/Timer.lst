@@ -1,0 +1,54 @@
+C51 COMPILER V9.54   TIMER                                                                 03/19/2021 09:02:32 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE TIMER
+OBJECT MODULE PLACED IN .\Objects\Timer.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE user\Timer.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\T
+                    -imer.lst) OBJECT(.\Objects\Timer.obj)
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "Timer.h"
+   3          
+   4          #define TIMER0_VECTOR   1       //TIMER0 Interrupt Vevtor
+   5          #define d_T0MOD         0x00    //TMOD[3:0] TIMER0 Mode setting 
+   6          #define d_T1MOD         0x00    //TMOD[7:4] TIMER1 Mode setting
+   7          #define ET2             0x00    //TIMER2 overflow Interrupt Enable (Default 0 Disable)
+   8          #define ET1             0x00    //TIMER1 overflow Interrupt Enable (Default 0 Disable)
+   9          #define ET0             0x01    //TIMER0 overflow Interrupt Enable (Default 0 Disable)
+  10          
+  11          #define d_MODEVALUE_T0      8192    //MODE0 13bit 8192
+  12          #define d_RELOADVALUE_T0    3000     //User Define Reload Value 
+  13          extern void FlashLed(void);
+  14          void TIMER0_initialize(void)  //Initialize TIMER0
+  15          {
+  16   1          IEN0 |= (ET2<<5)|(ET1<<3)|(ET0<<1);    //IE=IEN0
+  17   1          TMOD  = (d_T1MOD<<4)|(d_T0MOD);
+  18   1          TH0   = (d_MODEVALUE_T0-d_RELOADVALUE_T0)/32;    //MODE0 13bit 8192
+  19   1          TL0   = (d_MODEVALUE_T0-d_RELOADVALUE_T0)%32;
+  20   1          TR0   = 1;   //Timer0 Start bit
+  21   1      }
+  22          void TIMER0_ISR(void) interrupt TIMER0_VECTOR
+  23          {
+  24   1          TH0 = (d_MODEVALUE_T0-d_RELOADVALUE_T0)/32;    //MODE0 13bit 8192
+  25   1          TL0 = (d_MODEVALUE_T0-d_RELOADVALUE_T0)%32;
+  26   1      
+  27   1          // To do something by using timer interrupt.
+  28   1          FlashLed();
+  29   1      
+  30   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     80    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

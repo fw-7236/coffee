@@ -1,0 +1,136 @@
+A51 MACRO ASSEMBLER  INITROM                                                              03/19/2021 09:02:31 PAGE     1
+
+
+MACRO ASSEMBLER A51 V8.02c
+OBJECT MODULE PLACED IN .\Objects\InitROM.obj
+ASSEMBLER INVOKED BY: F:\keil\C51\BIN\A51.EXE user\InitROM.asm SET(SMALL) DEBUG PRINT(.\Listings\InitROM.lst) OBJECT(.\O
+                      bjects\InitROM.obj) EP
+
+LOC  OBJ            LINE     SOURCE
+
+                       1     ;;
+                       2     ;;  aTouch_InitROM.asm
+                       3     ;;
+                       4             PUBLIC CO_TKEN0
+                       5             PUBLIC CO_TKEN1
+                       6             PUBLIC CO_TKCON
+                       7             PUBLIC CO_TKSW
+                       8             PUBLIC CO_TKPSSR
+                       9             PUBLIC CO_TKWKTRICNT
+                      10             PUBLIC CO_MODE
+                      11             PUBLIC CO_WKTKEN0
+                      12             PUBLIC CO_WKTKEN1
+                      13             PUBLIC CO_SYSCTRL
+                      14             PUBLIC CO_DEBOUNCE
+                      15             PUBLIC CO_RELEASE
+                      16             PUBLIC CO_SENSITIVITY
+                      17             PUBLIC _Touch_InitROM
+                      18     ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+                      19     
+                      20     
+----                  21         CSEG    AT  1FC0H
+1FC0                  22     _Touch_InitROM:
+----                  23         CSEG    AT  1FC0H
+1FC0 02               24         DB    0x02
+                      25     
+----                  26         CSEG    AT  1FC1H
+1FC1 20               27         DB    0x20
+                      28     
+----                  29         CSEG    AT  1FC2H
+1FC2 00               30         DB    0x00
+                      31     
+----                  32         CSEG    AT  1FC4H
+1FC4                  33     CO_TKEN0:
+1FC4 0C               34         DB    0x0C
+                      35     
+----                  36         CSEG    AT  1FC5H
+1FC5                  37     CO_TKEN1:
+1FC5 00               38         DB    0x00
+                      39     
+----                  40         CSEG    AT  1FC7H
+1FC7                  41     CO_TKCON:
+1FC7 01               42         DB    0x01
+                      43     
+----                  44         CSEG    AT  1FC8H
+1FC8                  45     CO_TKSW:
+1FC8 14               46         DB    0x14
+                      47     
+----                  48         CSEG    AT  1FC9H
+1FC9                  49     CO_TKPSSR:
+1FC9 15               50         DB    0x15
+                      51     
+----                  52         CSEG    AT  1FCAH
+1FCA                  53     CO_TKWKTRICNT:
+1FCA 02               54         DB    0x02
+                      55     
+----                  56         CSEG    AT  1FCBH
+1FCB                  57     CO_MODE:
+A51 MACRO ASSEMBLER  INITROM                                                              03/19/2021 09:02:31 PAGE     2
+
+1FCB 00               58         DB    0x00
+                      59     
+----                  60         CSEG    AT  1FCCH
+1FCC                  61     CO_WKTKEN0:
+1FCC 00               62         DB    0x00
+                      63     
+----                  64         CSEG    AT  1FCDH
+1FCD                  65     CO_WKTKEN1:
+1FCD 00               66         DB    0x00
+                      67     
+                      68     ;bit 0: 1: EA don't care, 0: EA=0
+                      69     ;bit 1: entering PD mode by user or touchlyzer (1: user, 0: touchlyzer)
+----                  70         CSEG    AT  1FCFH
+1FCF                  71     CO_SYSCTRL:
+1FCF 01               72         DB    0x01
+                      73     
+----                  74         CSEG    AT  1FD0H
+1FD0                  75     CO_DEBOUNCE:
+1FD0 0A0A0A0A         76         DB    0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,0x0A
+1FD4 0A0A0A0A                
+1FD8 0A0A0A0A         77         DB    0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,0x0A,0x0A
+1FDC 0A0A0A0A                
+                      78     
+----                  79         CSEG    AT  1FE0H
+1FE0                  80     CO_RELEASE:
+1FE0 1B1B1B1B         81         DB    0x1B,0x1B,0x1B,0x1B,0x1B,0x1B,0x1B,0x00
+1FE4 1B1B1B00                
+1FE8 03001B1B         82         DB    0x03,0x00,0x1B,0x1B,0x1B,0x1B,0x1B,0x1B
+1FEC 1B1B1B1B                
+                      83     
+----                  84         CSEG    AT  1FF0H
+1FF0                  85     CO_SENSITIVITY:
+1FF0 CDCDF0F0         86         DB    0xCD,0xCD,0xF0,0xF0,0xCD,0xCD,0xCD,0xCD
+1FF4 CDCDCDCD                
+1FF8 CDCDC3C3         87         DB    0xCD,0xCD,0xC3,0xC3,0xC3,0xCD,0xCD,0xCD
+1FFC C3CDCDCD                
+                      88     
+                      89     
+                      90         END
+A51 MACRO ASSEMBLER  INITROM                                                              03/19/2021 09:02:31 PAGE     3
+
+SYMBOL TABLE LISTING
+------ ----- -------
+
+
+N A M E             T Y P E  V A L U E   ATTRIBUTES
+
+CO_DEBOUNCE. . . .  C ADDR   1FD0H   A   
+CO_MODE. . . . . .  C ADDR   1FCBH   A   
+CO_RELEASE . . . .  C ADDR   1FE0H   A   
+CO_SENSITIVITY . .  C ADDR   1FF0H   A   
+CO_SYSCTRL . . . .  C ADDR   1FCFH   A   
+CO_TKCON . . . . .  C ADDR   1FC7H   A   
+CO_TKEN0 . . . . .  C ADDR   1FC4H   A   
+CO_TKEN1 . . . . .  C ADDR   1FC5H   A   
+CO_TKPSSR. . . . .  C ADDR   1FC9H   A   
+CO_TKSW. . . . . .  C ADDR   1FC8H   A   
+CO_TKWKTRICNT. . .  C ADDR   1FCAH   A   
+CO_WKTKEN0 . . . .  C ADDR   1FCCH   A   
+CO_WKTKEN1 . . . .  C ADDR   1FCDH   A   
+_TOUCH_INITROM . .  C ADDR   1FC0H   A   
+
+
+REGISTER BANK(S) USED: 0 
+
+
+ASSEMBLY COMPLETE.  0 WARNING(S), 0 ERROR(S)

@@ -1,0 +1,9 @@
+".\Objects\STARTUP.obj",
+".\Objects\Main.obj",
+".\Objects\InitROM.obj",
+".\Objects\UART0.obj",
+".\Objects\ADC.obj",
+".\Objects\Timer.obj",
+".\Objects\EEPROM.obj" 
+TO ".\Objects\touch" 
+PRINT(".\Listings\touch.m51") RAMSIZE(256) 

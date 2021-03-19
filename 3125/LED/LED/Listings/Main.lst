@@ -1,0 +1,2049 @@
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\Main.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE user\Main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\Ma
+                    -in.lst) OBJECT(.\Objects\Main.obj)
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "UART0.h"
+   3          #include "EEPROM.h"
+   4          #include "Timer.h"
+   5          #include "ADC.h"
+   6          
+   7          
+   8          //1:enable, 0:disable
+   9          #define g_SleepCtrl     (*((unsigned char volatile xdata*)0x125))
+  10          //Set this flag can skip touch detection after user wakes up MCU from power down mode by external interrup
+             -t
+  11          #define ExtINTBreak     (*((unsigned char volatile xdata*)0xF7))
+  12          
+  13          
+  14          #define DEFAULT_SING  93  //单杯
+  15          #define DEFAULT_DBU   93  //双杯
+  16          
+  17          #define  TMP1B_VAL 1//蒸汽温度1
+  18          #define  TMP2B_VAL 2//蒸汽温度2
+  19          #define  SETTEMP    3//单杯时间
+  20          //#define  DUBT      4//双杯时间
+  21          
+  22          #define BU_2MIN  234  //120秒时间
+  23          #define BU_FULL  0
+  24          
+  25          #define YuPaoT     1
+  26          #define SW_LONG    100
+  27          
+  28          unsigned int xdata     SenTemp=0;//争蒸汽温度热电偶
+  29          unsigned int xdata      CafTemp=0;//咖啡煲温度NTC
+  30          unsigned char xdata     PushFlag=0;//蒸汽煲温度NTC
+  31          unsigned char xdata     ShuiFlag=0;//水位开关检测
+  32          unsigned char xdata     WaterFlag=0;//满水标志位
+  33          unsigned char xdata             HeatState=0;
+  34          unsigned char   xdata   PowerFlag=0;//电源标志
+  35          
+  36          unsigned char xdata     ZetTmp=0;//蒸汽温度工作值
+  37          unsigned char xdata     Temp1 =0; //蒸汽温度1设定值
+  38          unsigned char xdata     Temp2 =0; //蒸汽温度2设定值
+  39          
+  40          unsigned int  xdata     SetTemp=0;//咖啡设定温度
+  41          unsigned char xdata     COFE_TMP=124;//做咖啡温度
+  42          unsigned char xdata     COFE_LIMT=93;//显示限制
+  43          
+  44          unsigned int  xdata     TimeCc=0;//状态机计时
+  45          unsigned int  xdata     TimeCc1=0;//状态机计时
+  46          unsigned int  xdata     AutCtrTime=0;//蒸汽自动控制计时
+  47          unsigned int  xdata     BengCtrTime=0;//蒸汽自动控制计时
+  48          unsigned int  xdata     AutTempTime=0;//自动温度计时
+  49          unsigned int  xdata     CofAutCtrTime=0;//咖啡自动控制计时
+  50          unsigned int  xdata     StemAutCtrTime=0;//咖啡自动控制计时
+  51          unsigned int  xdata     MakTim=0;//制作计时
+  52          unsigned int  xdata     MkCafeTime=0;//做咖啡时间
+  53          unsigned char xdata     ErrCode=0;//存储咖啡任务错误代码
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 2   
+
+  54          unsigned char xdata     ErrCode1=0;//存储蒸汽任务错误代码
+  55          
+  56          unsigned char xdata             Cafone=0;
+  57          unsigned char xdata     Caftwo=0;
+  58          unsigned char xdata     Cafthr=0;
+  59          unsigned char xdata     Zheone=0;
+  60          unsigned char xdata     Zhetwo=0;
+  61          unsigned char xdata     Zhethr=0;
+  62          unsigned char xdata     disCofLed =0;
+  63          unsigned char xdata     disStemLed =0;
+  64          
+  65          unsigned char xdata     SigFlag=0;
+  66          unsigned char xdata     DubFlag=0;
+  67          
+  68          unsigned char xdata     ADKEY=0;//AD按键
+  69          
+  70          
+  71          unsigned int xdata  ShuiTime=0;//补水时间计数
+  72          unsigned char xdata   WhichBut=0;//记录哪个按键进入设置
+  73          unsigned char xdata   WhichBut1=0;//记录哪个按键进
+  74          
+  75          unsigned int KeyTime=0;
+  76          unsigned int KeyTime1=0;
+  77          unsigned char LedOnOff=0;
+  78          unsigned char LedOnOff1=0;
+  79          unsigned char onoff=1;
+  80          
+  81          bit HeatFlag;//蒸汽加热标志位
+  82          bit CofHeat=0;//咖啡加热标志
+  83          
+  84          #define  ONES          445///循环时间为1秒
+  85          //********************************************************************
+  86          #define LED_COM1        P3_3
+  87          #define LED_COM2        P3_4
+  88          #define LED_COM3        P3_5
+  89          #define LED_COM4        P1_7
+  90          #define LED_COM5        P1_6
+  91          #define LED_COM6        P1_3
+  92          #define LED_COM7        P1_2
+  93          
+  94          #define LED_A           P0_0
+  95          #define LED_B           P0_1
+  96          #define LED_C           P0_2
+  97          #define LED_D           P0_3
+  98          #define LED_E           P0_4
+  99          #define LED_F           P0_5
+ 100          #define LED_G           P0_6
+ 101          #define LED_H           P0_7
+ 102          
+ 103          #define SW_ADD          P3_0    //SW1
+ 104          #define SW_SUB          P3_1    //SW2
+ 105          
+ 106          #define K1                      P1_0   //AD按键
+ 107          
+ 108          #define RXD                     P1_5
+ 109          #define TXD                     P1_4
+ 110          
+ 111          #define SW_L        4
+ 112          #define SW_D        4
+ 113          
+ 114          //*******************************************************************
+ 115          typedef enum _WORKState
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 3   
+
+ 116          {
+ 117              WORK_STATE_INIT     =     0,//系统初始化
+ 118              WORK_STATE_BENG     =     1,//泵水3秒钟
+ 119              WORK_STATE_RHEAT    =     2,//咖啡预热
+ 120              WORK_STATE_ERR      =     3,//系统运行错误
+ 121              WORK_STATE_DOWN     =     4,//关机状态
+ 122              //***************************************
+ 123              WORK_STATE_RUN      =     8,//显示NTC实际温度
+ 124              WORK_STATE_WAIT     =     9,//轮流开启阀门
+ 125              WORK_STATE_PER      =     10,//预泡
+ 126              WORK_STATE_PAO              =         11,
+ 127              WORK_STATE_OUT      =     12,//出咖啡
+ 128              //************************************************
+ 129              WORK_STATE_SET     =     16,//咖啡时间设置
+ 130          } WorkState;
+ 131          
+ 132          WorkState  swWorkState=WORK_STATE_INIT;//定义状态机
+ 133          
+ 134          typedef enum _StemWorkState
+ 135          {
+ 136              OPT_STATE_INIT     =     0,//0x00 表示机器初始化状态 全部数码管显示888 1秒
+ 137              OPT_STATE_IDLE     =     1,//等待用户操作状态
+ 138              OPT_STATE_HEAD     =     2,//表示加热状态1
+ 139              OPT_STATE_CLERA    =     3,//表示清洁状态
+ 140              OPT_STATE_SETMP1   =     4,//表示温度设置1
+ 141              OPT_STATE_SETMP2   =     5,//表示温度设置2
+ 142              OPT_STATE_ERR      =     6,//出错
+ 143              OPT_STATE_DOWN     =     7,//关机状态
+ 144          } _StemWorkState;
+ 145          
+ 146          _StemWorkState  StemWork=OPT_STATE_INIT;//定义状态机
+ 147          
+ 148          //数据头
+ 149          #define  ESC_01         0x1B
+ 150          #define  ESC_02         0x2A
+ 151          //**********************************************************
+ 152          #define  CMD_CTMP               0x01  //读取咖啡温度
+ 153          #define  CMD_ZTMP               0x02  //读取蒸汽温度
+ 154          #define  CMD_SHUI       0x03  //读取水位
+ 155          #define  CMD_LIU        0x04  //读取流量 
+ 156          #define  CMD_COFE       0x05  //读取咖啡按键 
+ 157          #define  CMD_SHXI       0x06  //读取水箱状态
+ 158          #define  CMD_POP        0x07  //表示压力开关状态
+ 159          #define  CMD_MS         0x08  //获取蒸汽开关
+ 160          #define  CMD_STEMTMP    0x09  //获取蒸汽温度(热电偶)
+ 161          
+ 162          //************************************************************
+ 163          #define  CMD_CTBENG     0x10  //表示控制泵抽水           CK6
+ 164          #define  CMD_CTZHEN     0x11  //表示控制蒸汽进水阀              CK5
+ 165          #define  CMD_CTHEAT     0x12  //表示控制热水电磁阀              CK4 
+ 166          #define  CMD_CTCFE      0x13  //表示控制咖啡出水电磁阀          CK3
+ 167          #define  CMD_CTZSHUI    0x14  //表示控制咖啡进水阀              CK2
+ 168          #define  CMD_BK1                0x15  //表示控制备用                    CK1
+ 169          #define  CMD_LAMP       0x16  //灯控制开关                      LAMP
+ 170          #define  CMD_CAFEH      0x17  //控制咖啡煲加热           PWM
+ 171          #define  CMD_ZHENH      0x18  //控制蒸气煲加热           CT2
+ 172          
+ 173          #define  CMD_BUZ        0x19  //控制蜂鸣器
+ 174          #define  CMD_SLEEP      0x1A  //表示控制休眠
+ 175          #define  CMD_PWR        0x20  //电源开关
+ 176          //***********************************************************
+ 177          
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 4   
+
+ 178          #define  P_TO_DIS       0x01 //电源板主机向上发送
+ 179          #define  DIS_TO_P       0x02 //表示显示板向电源板发送
+ 180          #define  CMD_OK         0xAA //表示收到指令成功
+ 181          #define  CMD_FAIL       0x55 //表示失败
+ 182          
+ 183          unsigned char  CheckCoffTemp(void);
+ 184          unsigned char  CheckStemTemp(void);
+ 185          
+ 186          #define TK0AVG  ((unsigned int volatile xdata*)0x178)                           //key0平均值地址
+ 187          //========================================================================================================
+ 188          //  Command Read Format:
+ 189          //  Start    -> Slave(W) -> Ack -> Command -> Ack ->
+ 190          //  Re-Start -> Slave(R) -> Ack ->   0x00  -> Ack ->  TKSTATUS1  -> Ack -> TKSTATUS0 -> NAck -> Stop
+ 191          //
+ 192          //  Touch Slave(W) Address = 0x60
+ 193          //  Touch Slave(R) Address = 0x61
+ 194          //  Read Key Status Command Number = 0x17
+ 195          //
+ 196          //  [Master Example]
+ 197          //  Start    ->  0x60(W) -> Ack ->   0x17  -> Ack ->
+ 198          //  Re-Start ->  0x61(R) -> Ack ->   0x00  -> Ack ->  TKSTATUS1  -> Ack -> TKSTATUS0 -> NAck -> Stop
+ 199          //========================================================================================================
+ 200          
+ 201          
+ 202          
+ 203          //******************************************************************
+ 204          //读取蒸汽温度1
+ 205          void  WriteTmp1BEeprom(void)
+ 206          {
+ 207   1          Write_EEPROM(TMP1B_VAL,Temp1);
+ 208   1      }
+ 209          void  ReadTmp1BEeprom(void)
+ 210          {
+ 211   1          Temp1=Read_EEPROM(TMP1B_VAL);
+ 212   1          if(Temp1<50||Temp1>90)//当读取值不在范围值 恢复默认值
+ 213   1          {
+ 214   2              Temp1=60;
+ 215   2              WriteTmp1BEeprom();
+ 216   2          }
+ 217   1      }
+ 218          
+ 219          //读取蒸汽温度2
+ 220          void  WriteTmp2BEeprom(void)
+ 221          {
+ 222   1          Write_EEPROM(TMP2B_VAL,Temp2);
+ 223   1      }
+ 224          void  ReadTmp2BEeprom(void)
+ 225          {
+ 226   1          Temp2=Read_EEPROM(TMP2B_VAL);
+ 227   1          if(Temp2<50||Temp2>90)//当读取值不在范围值 恢复默认值
+ 228   1          {
+ 229   2              Temp2=70;
+ 230   2              WriteTmp2BEeprom();
+ 231   2          }
+ 232   1      }
+ 233          //**********************************************************************************
+ 234          //读写咖啡温度
+ 235          void  WriteSetTempEeprom(void)
+ 236          {
+ 237   1          Write_EEPROM(SETTEMP,SetTemp);
+ 238   1      }
+ 239          void  ReadSetTempEeprom(void)
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 5   
+
+ 240          {
+ 241   1          SetTemp=Read_EEPROM(SETTEMP);
+ 242   1          if(SetTemp>100||SetTemp<88)//当读取值不在范围值 恢复默认值
+ 243   1          {
+ 244   2              SetTemp=DEFAULT_SING;
+ 245   2              WriteSetTempEeprom();
+ 246   2          }
+ 247   1      }
+ 248          //**********************************************************************************
+ 249          //读写双杯时间
+ 250          //void  WriteDbuEeprom(void)
+ 251          //{
+ 252          //    Write_EEPROM(DUBT,DbuTemp);
+ 253          //}
+ 254          //void  ReadDbuEeprom(void)
+ 255          //{
+ 256          //    DbuTemp=Read_EEPROM(DUBT);
+ 257          //    if(DbuTemp>100||DbuTemp<88)//当读取值不在范围值 恢复默认值
+ 258          //    {
+ 259          //        DbuTemp=DEFAULT_DBU;
+ 260          //        WriteDbuEeprom();
+ 261          //    }
+ 262          //}
+ 263          
+ 264          //********************************************************************************
+ 265          
+ 266          void Delay(unsigned int tim)
+ 267          {
+ 268   1          unsigned int  i,j;
+ 269   1          for (i=0; i<tim; i++)
+ 270   1              for (j=0; j<100; j++);
+ 271   1      }
+ 272          //void delayNP(unsigned int tim)
+ 273          //{
+ 274          //    unsigned int  i,j;
+ 275          //    for (i=0; i<tim; i++)
+ 276          //    {
+ 277          //        for (j=0; j<10; j++);
+ 278          //    }
+ 279          //}
+ 280          //*******************************************************************
+ 281          #define TIME_OUT   200
+ 282          unsigned char  UART_Rxd_Process(unsigned char cmd)//处理显示相关指令
+ 283          {
+ 284   1          unsigned char xdata pcmd=0,sdata1=0,sdata2=0,schecksum1,schecksum2;
+ 285   1          unsigned short CheckSumDIS,CheckSumPo;
+ 286   1          unsigned int timeOut=0;
+ 287   1          while(1)
+ 288   1          {
+ 289   2              if(GetBufSize()>=8)
+ 290   2                  break;
+ 291   2              timeOut++;
+ 292   2              Delay(10);
+ 293   2              if(timeOut>TIME_OUT)
+ 294   2                  break;
+ 295   2          }
+ 296   1          if(GetBufSize()>=8)
+ 297   1          {
+ 298   2              if(GetBufData()==ESC_01)//读取0x1B
+ 299   2              {
+ 300   3                  if(GetBufData()==ESC_02)//读取0x2A
+ 301   3                  {
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 6   
+
+ 302   4                      if(GetBufData()==P_TO_DIS)//0x02 表示显示屏到电源板指令
+ 303   4                      {
+ 304   5                          pcmd=GetBufData();
+ 305   5                          sdata1=GetBufData();
+ 306   5                          sdata2=GetBufData();
+ 307   5                          schecksum1=GetBufData();
+ 308   5                          schecksum2=GetBufData();
+ 309   5                          CheckSumDIS=(schecksum1<<8)+schecksum2;
+ 310   5                          CheckSumPo=ESC_01+ESC_02+P_TO_DIS+pcmd+sdata1+sdata2;
+ 311   5                          if((CheckSumPo==CheckSumDIS)&&(pcmd==cmd))//
+ 312   5                          {
+ 313   6                              switch(pcmd)
+ 314   6                              {
+ 315   7                              case CMD_CTMP://读取咖啡煲温度
+ 316   7                                  CafTemp=sdata1;
+ 317   7                                  break;
+ 318   7                              case CMD_ZTMP://读取蒸汽煲温度
+ 319   7                                  break;
+ 320   7                              case CMD_STEMTMP://获取蒸汽温度
+ 321   7                                  SenTemp=sdata1+3;
+ 322   7                                  break;
+ 323   7                              case CMD_SHUI://获取水箱水位
+ 324   7                                  ShuiFlag=sdata1;
+ 325   7                                  break;
+ 326   7                              case CMD_LIU://读取流量
+ 327   7                                  break;
+ 328   7                              case CMD_COFE://
+ 329   7                                  break;
+ 330   7                              case CMD_SHXI:
+ 331   7                                  break;
+ 332   7                              case CMD_POP:
+ 333   7                                  PushFlag=sdata1;
+ 334   7                                  break;
+ 335   7                              case CMD_MS:
+ 336   7                                  break;
+ 337   7                              case CMD_PWR:
+ 338   7                                  PowerFlag=sdata1;
+ 339   7                                  break;
+ 340   7                              case CMD_CTBENG: //表示控制泵抽水
+ 341   7                                  break;
+ 342   7                              case CMD_CTZHEN://表示控制蒸汽进水阀
+ 343   7                              case CMD_CTHEAT://表示控制热水电磁阀
+ 344   7                              case CMD_CTCFE://表示控制咖啡出水电磁阀
+ 345   7                              case CMD_CTZSHUI://表示控制咖啡进水阀
+ 346   7                              case CMD_BK1://表示控制备用
+ 347   7                              case CMD_LAMP://灯控制开关
+ 348   7                              case CMD_CAFEH://控制咖啡煲加热
+ 349   7                              case CMD_ZHENH://控制蒸气煲加热
+ 350   7                              case CMD_BUZ://控制蜂鸣器
+ 351   7                              case CMD_SLEEP://表示控制休眠
+ 352   7                                  break;
+ 353   7                              default:
+ 354   7                                  break;
+ 355   7                              }
+ 356   6                              return  0xAA;
+ 357   6                          }
+ 358   5                      }
+ 359   4                  }
+ 360   3              }
+ 361   2          }
+ 362   1          return 0;
+ 363   1      }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 7   
+
+ 364          
+ 365          void UART_Txd_Cmd(unsigned char Cmd,unsigned char Parm1,unsigned char Parm2)
+ 366          {
+ 367   1          unsigned short CheckSum=0;
+ 368   1          BufSizeClear();
+ 369   1          UART0_TX(ESC_01);
+ 370   1          UART0_TX(ESC_02);
+ 371   1          UART0_TX(DIS_TO_P);
+ 372   1          UART0_TX(Cmd);
+ 373   1          UART0_TX(Parm1);
+ 374   1          UART0_TX(Parm2);
+ 375   1          CheckSum=ESC_01+ESC_02+DIS_TO_P+Cmd+Parm1+Parm2;
+ 376   1          UART0_TX((CheckSum>>8)&0xFF);
+ 377   1          UART0_TX(CheckSum&0xFF);
+ 378   1      }
+ 379          
+ 380          
+ 381          
+ 382          //***************************************************************************
+ 383          unsigned char GetCurTmp(void)//获取咖啡煲温度
+ 384          {
+ 385   1          unsigned char i;
+ 386   1          UART_Txd_Cmd(CMD_CTMP,0x00,0x00);
+ 387   1          if(UART_Rxd_Process(CMD_CTMP)==0xAA)//返回成功
+ 388   1          {
+ 389   2              return 0x01;
+ 390   2          }
+ 391   1          else
+ 392   1          {
+ 393   2              for(i=0; i<3; i++)
+ 394   2              {
+ 395   3                  UART_Txd_Cmd(CMD_CTMP,0x00,0x00);
+ 396   3                  if(UART_Rxd_Process(CMD_CTMP)==0xAA)
+ 397   3                  {
+ 398   4                      return 0x01;
+ 399   4                  }
+ 400   3              }
+ 401   2          }
+ 402   1          return 0x00;//不正常控制
+ 403   1      }
+ 404          //unsigned char GetZhenQiTmp(void)//获取蒸汽煲温度
+ 405          //{
+ 406          //    unsigned char i;
+ 407          //    UART_Txd_Cmd(CMD_ZTMP,0x00,0x00);
+ 408          //    if(UART_Rxd_Process(CMD_ZTMP)==0xAA)//返回成功
+ 409          //    {
+ 410          //        return 0x01;
+ 411          //    }
+ 412          //    else
+ 413          //    {
+ 414          //        for(i=0; i<3; i++)
+ 415          //        {
+ 416          //            UART_Txd_Cmd(CMD_ZTMP,0x00,0x00);
+ 417          //            if(UART_Rxd_Process(CMD_ZTMP)==0xAA)
+ 418          //            {
+ 419          //                return 0x01;
+ 420          //            }
+ 421          //        }
+ 422          //    }
+ 423          //    return 0x00;//不正常控制
+ 424          //}
+ 425          unsigned char GetPop(void)//获取蒸汽煲压力
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 8   
+
+ 426          {
+ 427   1          unsigned char i;
+ 428   1          UART_Txd_Cmd(CMD_POP,0x00,0x00);
+ 429   1          if(UART_Rxd_Process(CMD_POP)==0xAA)//返回成功
+ 430   1          {
+ 431   2              return 0x01;
+ 432   2          }
+ 433   1          else
+ 434   1          {
+ 435   2              for(i=0; i<3; i++)
+ 436   2              {
+ 437   3                  UART_Txd_Cmd(CMD_POP,0x00,0x00);
+ 438   3                  if(UART_Rxd_Process(CMD_POP)==0xAA)
+ 439   3                  {
+ 440   4                      return 0x01;
+ 441   4                  }
+ 442   3              }
+ 443   2          }
+ 444   1          return 0x00;//不正常控制
+ 445   1      }
+ 446          
+ 447          
+ 448          unsigned char GetSteamTmp(void)//获取蒸汽温度
+ 449          {
+ 450   1          unsigned char i;
+ 451   1          UART_Txd_Cmd(CMD_STEMTMP,0x00,0x00);
+ 452   1          if(UART_Rxd_Process(CMD_STEMTMP)==0xAA)//返回成功
+ 453   1          {
+ 454   2              return 0x01;
+ 455   2          }
+ 456   1          else
+ 457   1          {
+ 458   2              for(i=0; i<5; i++)
+ 459   2              {
+ 460   3                  UART_Txd_Cmd(CMD_STEMTMP,0x00,0x00);
+ 461   3                  if(UART_Rxd_Process(CMD_STEMTMP)==0xAA)
+ 462   3                  {
+ 463   4                      return 0x01;
+ 464   4                  }
+ 465   3              }
+ 466   2          }
+ 467   1          return 0x00;//不正常控制
+ 468   1      }
+ 469          
+ 470          unsigned char GetShuiWei(void)//取得水箱水位
+ 471          {
+ 472   1          unsigned char i;
+ 473   1          UART_Txd_Cmd(CMD_SHUI,0x00,0x00);
+ 474   1          if(UART_Rxd_Process(CMD_SHUI)==0xAA)//返回成功
+ 475   1          {
+ 476   2              return 0x01;
+ 477   2          }
+ 478   1          else
+ 479   1          {
+ 480   2              for(i=0; i<3; i++)
+ 481   2              {
+ 482   3                  UART_Txd_Cmd(CMD_SHUI,0x00,0x00);
+ 483   3                  if(UART_Rxd_Process(CMD_SHUI)==0xAA)
+ 484   3                  {
+ 485   4                      return 0x01;
+ 486   4                  }
+ 487   3              }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 9   
+
+ 488   2          }
+ 489   1          return 0x00;//不正常控制
+ 490   1      }
+ 491          unsigned char CtrK1(unsigned char ctr)//蒸汽进水电磁阀
+ 492          {
+ 493   1          unsigned char i;
+ 494   1          UART_Txd_Cmd(CMD_CTZHEN,ctr,0x00);
+ 495   1          if(UART_Rxd_Process(CMD_CTZHEN)==0xAA)//返回成功
+ 496   1          {
+ 497   2              return 0x01;
+ 498   2          }
+ 499   1          else
+ 500   1          {
+ 501   2              for(i=0; i<5; i++)
+ 502   2              {
+ 503   3                  UART_Txd_Cmd(CMD_CTZHEN,ctr,0x00);
+ 504   3                  if(UART_Rxd_Process(CMD_CTZHEN)==0xAA)
+ 505   3                  {
+ 506   4                      return 0x01;
+ 507   4                  }
+ 508   3              }
+ 509   2          }
+ 510   1          return 0x00;//不正常控制
+ 511   1      }
+ 512          unsigned char CtrK2(unsigned char ctr)//咖啡出水电磁阀
+ 513          {
+ 514   1          unsigned char i;
+ 515   1          UART_Txd_Cmd(CMD_CTCFE,ctr,0x00);
+ 516   1          if(UART_Rxd_Process(CMD_CTCFE)==0xAA)//返回成功
+ 517   1          {
+ 518   2              return 0x01;
+ 519   2          }
+ 520   1          else
+ 521   1          {
+ 522   2              for(i=0; i<5; i++)
+ 523   2              {
+ 524   3                  UART_Txd_Cmd(CMD_CTCFE,ctr,0x00);
+ 525   3                  if(UART_Rxd_Process(CMD_CTCFE)==0xAA)
+ 526   3                  {
+ 527   4                      return 0x01;
+ 528   4                  }
+ 529   3              }
+ 530   2          }
+ 531   1          return 0x00;//不正常控制
+ 532   1      }
+ 533          //*********************************************************************************
+ 534          unsigned char CtrCoffeHeat(unsigned char ctr)//控制咖啡加热
+ 535          {
+ 536   1          unsigned char i;
+ 537   1          UART_Txd_Cmd(CMD_CAFEH,ctr,0x00);
+ 538   1          if(UART_Rxd_Process(CMD_CAFEH)==0xAA)//返回成功
+ 539   1          {
+ 540   2              return 0x01;
+ 541   2          }
+ 542   1          else
+ 543   1          {
+ 544   2              for(i=0; i<5; i++)
+ 545   2              {
+ 546   3                  UART_Txd_Cmd(CMD_CAFEH,ctr,0x00);
+ 547   3                  if(UART_Rxd_Process(CMD_CAFEH)==0xAA)
+ 548   3                  {
+ 549   4                      return 0x01;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 10  
+
+ 550   4                  }
+ 551   3              }
+ 552   2          }
+ 553   1          return 0x00;//不正常控制
+ 554   1      }
+ 555          unsigned char CtrZhenQI(unsigned char ctrOn)//控制蒸汽加热
+ 556          {
+ 557   1          unsigned char i;
+ 558   1          UART_Txd_Cmd(CMD_ZHENH,ctrOn,0x00);
+ 559   1          if(UART_Rxd_Process(CMD_ZHENH)==0xAA)//返回成功
+ 560   1          {
+ 561   2              return 0x01;
+ 562   2          }
+ 563   1          else
+ 564   1          {
+ 565   2              for(i=0; i<5; i++)
+ 566   2              {
+ 567   3                  UART_Txd_Cmd(CMD_ZHENH,ctrOn,0x00);
+ 568   3                  if(UART_Rxd_Process(CMD_ZHENH)==0xAA)
+ 569   3                  {
+ 570   4                      return 0x01;
+ 571   4                  }
+ 572   3              }
+ 573   2          }
+ 574   1          return 0x00;//不正常控制
+ 575   1      }
+ 576          //************************************************************************************
+ 577          unsigned char CtrBeng(unsigned char Ontime)//控制泵
+ 578          {
+ 579   1          unsigned char i;
+ 580   1          UART_Txd_Cmd(CMD_CTBENG,Ontime,0x00);
+ 581   1          if(UART_Rxd_Process(CMD_CTBENG)==0xAA)//返回成功
+ 582   1          {
+ 583   2              return 0x01;
+ 584   2          }
+ 585   1          else
+ 586   1          {
+ 587   2              for(i=0; i<5; i++)
+ 588   2              {
+ 589   3                  UART_Txd_Cmd(CMD_CTBENG,Ontime,0x00);
+ 590   3                  if(UART_Rxd_Process(CMD_CTBENG)==0xAA)
+ 591   3                  {
+ 592   4                      return 0x01;
+ 593   4                  }
+ 594   3              }
+ 595   2          }
+ 596   1          return 0x00;//不正常控制
+ 597   1      }
+ 598          
+ 599          //unsigned char CtrJinShuiF(unsigned char ctr)//控制咖啡进水电磁阀
+ 600          //{
+ 601          //    unsigned char i;
+ 602          //    UART_Txd_Cmd(CMD_CTZSHUI,ctr,0x00);//
+ 603          //    if(UART_Rxd_Process(CMD_CTZSHUI)==0xAA)//返回成功
+ 604          //    {
+ 605          //        return 0x01;
+ 606          //    }
+ 607          //    else
+ 608          //    {
+ 609          //        for(i=0; i<3; i++)
+ 610          //        {
+ 611          //            UART_Txd_Cmd(CMD_CTZSHUI,ctr,0x00);
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 11  
+
+ 612          //            if(UART_Rxd_Process(CMD_CTZSHUI)==0xAA)
+ 613          //            {
+ 614          //                return 0x01;
+ 615          //            }
+ 616          //        }
+ 617          //    }
+ 618          //    return 0x00;//不正常控制
+ 619          //}
+ 620          //************************************************************************************
+ 621          unsigned char CtrBuz(unsigned char ctr)//蜂鸣器
+ 622          {
+ 623   1          unsigned char i;
+ 624   1          UART_Txd_Cmd(CMD_BUZ,ctr,0x00);
+ 625   1          if(UART_Rxd_Process(CMD_BUZ)==0xAA)//返回成功
+ 626   1          {
+ 627   2              return 0x01;
+ 628   2          }
+ 629   1          else
+ 630   1          {
+ 631   2              for(i=0; i<5; i++)
+ 632   2              {
+ 633   3                  UART_Txd_Cmd(CMD_BUZ,ctr,0x00);
+ 634   3                  if(UART_Rxd_Process(CMD_BUZ)==0xAA)
+ 635   3                  {
+ 636   4                      return 0x01;
+ 637   4                  }
+ 638   3              }
+ 639   2          }
+ 640   1          return 0x00;//不正常控制
+ 641   1      }
+ 642          
+ 643          unsigned char CtrSteam(unsigned char ctr)//控制出蒸汽阀
+ 644          {
+ 645   1          unsigned char i;
+ 646   1          UART_Txd_Cmd(CMD_CTHEAT,ctr,0x00);
+ 647   1          if(UART_Rxd_Process(CMD_CTHEAT)==0xAA)//返回成功
+ 648   1          {
+ 649   2              return 0x01;
+ 650   2          }
+ 651   1          else
+ 652   1          {
+ 653   2              for(i=0; i<5; i++)
+ 654   2              {
+ 655   3                  UART_Txd_Cmd(CMD_CTHEAT,ctr,0x00);
+ 656   3                  if(UART_Rxd_Process(CMD_CTHEAT)==0xAA)
+ 657   3                  {
+ 658   4                      return 0x01;
+ 659   4                  }
+ 660   3              }
+ 661   2          }
+ 662   1          return 0x00;//不正常控制
+ 663   1      }
+ 664          
+ 665          unsigned char GetPower()//获取电源
+ 666          {
+ 667   1          unsigned char i;
+ 668   1          UART_Txd_Cmd(CMD_PWR,0x00,0x00);
+ 669   1          if(UART_Rxd_Process(CMD_PWR)==0xAA)//返回成功
+ 670   1          {
+ 671   2              return 0x01;
+ 672   2          }
+ 673   1          else
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 12  
+
+ 674   1          {
+ 675   2              for(i=0; i<5; i++)
+ 676   2              {
+ 677   3                  UART_Txd_Cmd(CMD_PWR,0x00,0x00);
+ 678   3                  if(UART_Rxd_Process(CMD_PWR)==0xAA)
+ 679   3                  {
+ 680   4                      return 0x01;
+ 681   4                  }
+ 682   3              }
+ 683   2          }
+ 684   1          return 0x00;//不正常控制
+ 685   1      }
+ 686          
+ 687          
+ 688          //***********************************************************************************
+ 689          
+ 690          
+ 691          
+ 692          // 00 表示双向IO
+ 693          // 01 表示推挽输出
+ 694          // 10 表示高阻输入
+ 695          // 11 表示开漏
+ 696          void GPIO_Init()
+ 697          {
+ 698   1          P0 = 0x00;
+ 699   1          P1 = 0x00;
+ 700   1          P2 = 0x00;
+ 701   1          P3 = 0x00;
+ 702   1      
+ 703   1      //      7  6  5  4  3  2  1  0
+ 704   1      //P0M1  0  0  0  0      0  0  0  0
+ 705   1      //P0M0  1  1  1  1      1  1  1  1
+ 706   1      //          H  G  F      E  D  C  B  A
+ 707   1          P0M1 = 0x00;
+ 708   1          P0M0 = 0xFF;
+ 709   1      //      7       6       5       4       3       2       1       0
+ 710   1      //P1M1  0       0       0       0       0       0       0       0
+ 711   1      //P1M0  1       1       0       1       1       1       0       0
+ 712   1      //   COM4 COM5 RX  TX COM6 COM7     K1
+ 713   1          P1M1 = 0x00;
+ 714   1          P1M0 = 0xDC;
+ 715   1      //      7        6       5       4   3   2   1   0
+ 716   1      //P2M1  0        0   0   0       0   0   0       0
+ 717   1      //P2M0  0        0   1   0       0   0   0       0
+ 718   1      //         RX1 TX1
+ 719   1      
+ 720   1          P2M1 = 0x00;
+ 721   1          P2M0 = 0x20;
+ 722   1      //      7       6       5       4        3    2         1       0
+ 723   1      //P3M1  0       0       0       0        0    0         0       0
+ 724   1      //P3M0  0       0       1       1        1    0         0       0
+ 725   1      //                COM3 COM2 COM1    SW_SUB  SW_ADD
+ 726   1      //******************************************************
+ 727   1          P3M1 = 0x03;
+ 728   1          P3M0 = 0x38;
+ 729   1      //********************************************************
+ 730   1          K1 = 0;
+ 731   1          LED_A=0;
+ 732   1          LED_B=0;
+ 733   1          LED_C=0;
+ 734   1          LED_D=0;
+ 735   1          LED_E=0;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 13  
+
+ 736   1          LED_F=0;
+ 737   1          LED_G=0;
+ 738   1          LED_H=0;
+ 739   1          LED_COM1=0;
+ 740   1          LED_COM2=0;
+ 741   1          LED_COM3=0;
+ 742   1          LED_COM4=0;
+ 743   1          LED_COM5=0;
+ 744   1          LED_COM6=0;
+ 745   1          LED_COM7=0;
+ 746   1          TXD=1;
+ 747   1          RXD=1;
+ 748   1      //********************************************************
+ 749   1      }
+ 750          void DisplayC(unsigned char Tmp,unsigned char tag)
+ 751          {
+ 752   1          if(tag==0)//正常数值显示
+ 753   1          {
+ 754   2              if(Tmp>=100)
+ 755   2              {
+ 756   3                  Cafone=Tmp/100;//
+ 757   3                  Caftwo=(Tmp%100)/10;
+ 758   3                  Cafthr=(Tmp%100)%10;
+ 759   3              } else if(Tmp>=10)
+ 760   2              {
+ 761   3                  Cafone=0x0E;//
+ 762   3                  Caftwo=Tmp/10;
+ 763   3                  Cafthr=Tmp%10;
+ 764   3              }
+ 765   2              else
+ 766   2              {
+ 767   3                  Cafone=0x0E;//
+ 768   3                  Caftwo=0x0E;
+ 769   3                  Cafthr=Tmp%10;
+ 770   3              }
+ 771   2          }
+ 772   1          else if(tag==1)//显示LO
+ 773   1          {
+ 774   2              Cafone=0x0E;//
+ 775   2              Caftwo=0x10;
+ 776   2              Cafthr=0x00;
+ 777   2      
+ 778   2          }
+ 779   1          else if(tag==2)//显示000
+ 780   1          {
+ 781   2              Cafone=0x00;//
+ 782   2              Caftwo=0x00;
+ 783   2              Cafthr=0x00;
+ 784   2          }
+ 785   1          else if(tag==3)//出错显示
+ 786   1          {
+ 787   2              Cafone=0x0E;//
+ 788   2              Caftwo=0x0B;
+ 789   2              Cafthr=ErrCode;
+ 790   2          }
+ 791   1          else if(tag==4)//息屏
+ 792   1          {
+ 793   2              Cafone=0x0E;
+ 794   2              Caftwo=0x0E;
+ 795   2              Cafthr=0x0E;
+ 796   2          }
+ 797   1      }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 14  
+
+ 798          void DisplayZ(unsigned char Tmp,unsigned char tag)
+ 799          {
+ 800   1          if(tag==0)
+ 801   1          {
+ 802   2              if(Tmp>=100)
+ 803   2              {
+ 804   3                  Zheone=Tmp/100;//
+ 805   3                  Zhetwo=(Tmp%100)/10;
+ 806   3                  Zhethr=(Tmp%100)%10;
+ 807   3              } else if(Tmp>=10)
+ 808   2              {
+ 809   3                  Zheone=0x0E;//
+ 810   3                  Zhetwo=Tmp/10;
+ 811   3                  Zhethr=Tmp%10;
+ 812   3              }
+ 813   2              else
+ 814   2              {
+ 815   3                  Zheone=0x0E;//
+ 816   3                  Zhetwo=0x0E;
+ 817   3                  Zhethr=Tmp%10;
+ 818   3              }
+ 819   2          }
+ 820   1          else if(tag==1)//显示LO
+ 821   1          {
+ 822   2              Zheone=0x0E;
+ 823   2              Zhetwo=0x10;
+ 824   2              Zhethr=0x00;
+ 825   2          }
+ 826   1          else if(tag==2)//补水显示000
+ 827   1          {
+ 828   2              Zheone=0x00;
+ 829   2              Zhetwo=0x00;
+ 830   2              Zhethr=0x00;
+ 831   2          }
+ 832   1          else if(tag==3)//出错显示
+ 833   1          {
+ 834   2              Zheone=0x0E;
+ 835   2              Zhetwo=0x0B;
+ 836   2              Zhethr=ErrCode1;
+ 837   2          }
+ 838   1          else if(tag==4)//息屏
+ 839   1          {
+ 840   2              Zheone=0x0E;
+ 841   2              Zhetwo=0x0E;
+ 842   2              Zhethr=0x0E;
+ 843   2          }
+ 844   1      }
+ 845          
+ 846          
+ 847          void PowerSleep(void)
+ 848          {
+ 849   1          CtrBeng(0x00);              //关闭水泵
+ 850   1          CtrK2(0x00);          //关出水
+ 851   1          CtrCoffeHeat(0x00);//关闭咖啡加热
+ 852   1      }
+ 853          void PowerSleep1(void)
+ 854          {
+ 855   1          HeatFlag=0;
+ 856   1          CtrZhenQI(0x00);//关加热
+ 857   1          HeatState=0;
+ 858   1          CtrK1(0x00);        //关进水
+ 859   1          CtrSteam(0x00);//关出蒸汽
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 15  
+
+ 860   1      }
+ 861          void CheckCofExit(void)
+ 862          {
+ 863   1          static unsigned char set=0;
+ 864   1          static unsigned char down=0;
+ 865   1          static unsigned char temp=0;
+ 866   1              static unsigned char temp1=0;
+ 867   1          ADKEY = GetADKey();
+ 868   1          switch(ADKEY)
+ 869   1          {
+ 870   2          case AD_SIG_KEY:
+ 871   2              temp=3;
+ 872   2              down=1;
+ 873   2              break;
+ 874   2          case AD_DU_KEY:
+ 875   2              temp=4;
+ 876   2              down=1;
+ 877   2              break;
+ 878   2          case AD_SET_KEY:
+ 879   2              if(set&&swWorkState==WORK_STATE_SET)
+ 880   2              {
+ 881   3                  KeyTime++;
+ 882   3                  if(KeyTime>SW_LONG)
+ 883   3                  {
+ 884   4                      temp1=1;
+ 885   4                      down=1;
+ 886   4                      set=0;
+ 887   4                      KeyTime=0;
+ 888   4                      if(CafTemp>COFE_LIMT)
+ 889   4                      {
+ 890   5                          DisplayC(COFE_LIMT,0);
+ 891   5                      }
+ 892   4                      else
+ 893   4                      {
+ 894   5                          DisplayC(CafTemp,0);
+ 895   5                      }
+ 896   4                                      onoff=0;
+ 897   4                  }
+ 898   3              }
+ 899   2              break;
+ 900   2          default:
+ 901   2              if(down)
+ 902   2              {
+ 903   3                  down=0;
+ 904   3                  if(temp=WhichBut&&swWorkState!=WORK_STATE_SET)
+ 905   3                  {
+ 906   4                      CtrBeng(0x00);
+ 907   4                      CtrK2(0x00);
+ 908   4                      swWorkState=WORK_STATE_RHEAT;
+ 909   4                  }
+ 910   3                  if(temp1==1)
+ 911   3                  {
+ 912   4                                      temp1=0;
+ 913   4                                      onoff=1;
+ 914   4                      swWorkState=WORK_STATE_RHEAT;
+ 915   4                  }
+ 916   3              }
+ 917   2              set=1;
+ 918   2              KeyTime=0;
+ 919   2              break;
+ 920   2          }
+ 921   1      }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 16  
+
+ 922          void CheckStemExit(void)
+ 923          {
+ 924   1          static unsigned char set1=0;
+ 925   1          static unsigned char timer1=0;
+ 926   1          static unsigned char temp=0;
+ 927   1          ADKEY = GetADKey();
+ 928   1          switch(ADKEY)
+ 929   1          {
+ 930   2          case AD_TMP1_KEY:
+ 931   2              temp=1;
+ 932   2              set1=1;
+ 933   2              break;
+ 934   2          case AD_TMP2_KEY:
+ 935   2              temp=2;
+ 936   2              set1=1;
+ 937   2              break;
+ 938   2          default:
+ 939   2              if(set1==1)
+ 940   2              {
+ 941   3                  timer1++;
+ 942   3                  set1=0;
+ 943   3                  if(temp==WhichBut1)
+ 944   3                  {
+ 945   4                      if(timer1>=2)
+ 946   4                      {
+ 947   5                          timer1=0;
+ 948   5                          StemWork=OPT_STATE_IDLE;
+ 949   5                      }
+ 950   4                      else if(StemWork<OPT_STATE_SETMP1)
+ 951   4                      {
+ 952   5                          timer1=0;
+ 953   5                          CtrSteam(0x00);
+ 954   5                          StemWork=OPT_STATE_IDLE;
+ 955   5                      }
+ 956   4                  }
+ 957   3              }
+ 958   2              break;
+ 959   2          }
+ 960   1      }
+ 961          
+ 962          void CheckCofButSet(void)
+ 963          {
+ 964   1          static unsigned char SING,DUB=0;    //按下标志位
+ 965   1          ADKEY = GetADKey();
+ 966   1          switch(ADKEY)
+ 967   1          {
+ 968   2          case AD_SIG_KEY://C1
+ 969   2              disCofLed=0x01;
+ 970   2              SING=1;
+ 971   2              break;
+ 972   2          case AD_DU_KEY://C2
+ 973   2              disCofLed=0x02;
+ 974   2              DUB=1;
+ 975   2              break;
+ 976   2          case AD_SET_KEY:
+ 977   2              KeyTime++;
+ 978   2              disCofLed=0x03;
+ 979   2              if(KeyTime>SW_LONG&&(StemWork<OPT_STATE_SETMP1||StemWork>OPT_STATE_SETMP2))
+ 980   2              {
+ 981   3                  KeyTime=0;
+ 982   3                  DisplayC(SetTemp,0);
+ 983   3                  swWorkState=WORK_STATE_SET;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 17  
+
+ 984   3              }
+ 985   2              break;
+ 986   2          default:
+ 987   2              if(SING)
+ 988   2              {
+ 989   3                  TimeCc=0;
+ 990   3                  SING=0;
+ 991   3                  WhichBut=3;
+ 992   3                  SigFlag=0xAA;
+ 993   3                  swWorkState=WORK_STATE_WAIT;
+ 994   3              }
+ 995   2              else if(DUB)
+ 996   2              {
+ 997   3                  DUB=0;
+ 998   3                  TimeCc=0;
+ 999   3                  WhichBut=4;
+1000   3                  DubFlag=0xAA;
+1001   3                  swWorkState=WORK_STATE_WAIT;
+1002   3              }
+1003   2              else
+1004   2              {
+1005   3                  KeyTime=0;
+1006   3                  disCofLed=0x03;
+1007   3              }
+1008   2              break;
+1009   2          }
+1010   1      }
+1011          void CheckSteamButSet(void)
+1012          {
+1013   1          static unsigned char TMP1,TMP2,CLEAR=0;     //按下标志位
+1014   1          ADKEY = GetADKey();
+1015   1          switch(ADKEY)
+1016   1          {
+1017   2          case AD_TMP1_KEY://T1
+1018   2              TMP1=1;
+1019   2              disStemLed=0x01;
+1020   2              KeyTime1++;
+1021   2              if(KeyTime1>SW_LONG&&swWorkState<WORK_STATE_SET)
+1022   2              {
+1023   3                  WhichBut1=1;
+1024   3                  TMP1=0;
+1025   3                  KeyTime1=0;
+1026   3                  DisplayZ(Temp1,0);
+1027   3                  StemWork=OPT_STATE_SETMP1;
+1028   3              }
+1029   2              break;
+1030   2          case AD_TMP2_KEY://T2
+1031   2              TMP2=1;
+1032   2              disStemLed=0x02;
+1033   2              KeyTime1++;
+1034   2              if(KeyTime1>SW_LONG&&swWorkState<WORK_STATE_SET)
+1035   2              {
+1036   3                  WhichBut1=2;
+1037   3                  TMP2=0;
+1038   3                  KeyTime1=0;
+1039   3                  DisplayZ(Temp2,0);
+1040   3                  StemWork=OPT_STATE_SETMP2;
+1041   3              }
+1042   2              break;
+1043   2          case AD_CLEAR_KEY://清洗
+1044   2              CLEAR=1;
+1045   2              disStemLed=0x04;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 18  
+
+1046   2              break;
+1047   2          default:
+1048   2              KeyTime1=0;
+1049   2              if(TMP1)
+1050   2              {
+1051   3                  TMP1=0;
+1052   3                  TimeCc1=0;
+1053   3                  ZetTmp=Temp1;
+1054   3                  WhichBut1=1;
+1055   3                  CtrSteam(0x01);
+1056   3                  StemWork=OPT_STATE_HEAD;
+1057   3              }
+1058   2              else if(TMP2)
+1059   2              {
+1060   3                  TMP2=0;
+1061   3                  TimeCc1=0;
+1062   3                  ZetTmp=Temp2;
+1063   3                  WhichBut1=2;
+1064   3                  CtrSteam(0x01);
+1065   3                  StemWork=OPT_STATE_HEAD;
+1066   3              }
+1067   2              else if(CLEAR)
+1068   2              {
+1069   3                  CLEAR=0;
+1070   3                  TimeCc1=0;
+1071   3                  CtrSteam(0x01);
+1072   3                  StemWork=OPT_STATE_CLERA;
+1073   3              }
+1074   2              else
+1075   2              {
+1076   3                  disStemLed=0x07;
+1077   3              }
+1078   2              break;
+1079   2          }
+1080   1      }
+1081          
+1082          void ButAdjPTo(unsigned char Type,unsigned char Cal)
+1083          {
+1084   1          switch(Type)
+1085   1          {
+1086   2          case TMP1B_VAL://蒸汽温度1
+1087   2              if((Temp1<90)&&(Cal==1))
+1088   2              {
+1089   3                  Temp1++;
+1090   3              }
+1091   2              else if((Temp1>50)&&(Cal==2))
+1092   2              {
+1093   3                  Temp1--;
+1094   3              }
+1095   2              WriteTmp1BEeprom();
+1096   2              DisplayZ(Temp1,0);
+1097   2              break;
+1098   2          case TMP2B_VAL://蒸汽温度2
+1099   2              if((Temp2<90)&&(Cal==1))
+1100   2              {
+1101   3                  Temp2++;
+1102   3              }
+1103   2              else if((Temp2>50)&&(Cal==2))
+1104   2              {
+1105   3                  Temp2--;
+1106   3              }
+1107   2              WriteTmp2BEeprom();
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 19  
+
+1108   2              DisplayZ(Temp2,0);
+1109   2              break;
+1110   2          case SETTEMP://温度设置
+1111   2              if((SetTemp<100)&&(Cal==1))
+1112   2              {
+1113   3                  SetTemp++;
+1114   3                  COFE_LIMT=SetTemp;
+1115   3                  COFE_TMP=COFE_TMP+31;
+1116   3              }
+1117   2              else if((SetTemp>88)&&(Cal==2))
+1118   2              {
+1119   3                  SetTemp--;
+1120   3                  COFE_LIMT=SetTemp;
+1121   3                  COFE_TMP=COFE_TMP+31;
+1122   3              }
+1123   2              WriteSetTempEeprom();
+1124   2              DisplayC(SetTemp,0);
+1125   2              break;
+1126   2          }
+1127   1      }
+1128          
+1129          
+1130          void ButAdjPro(unsigned char Type)
+1131          {
+1132   1          static unsigned char AddDelay=0;
+1133   1          static unsigned char SubDelay=0;
+1134   1          static unsigned char AddBFlag=0;
+1135   1          static unsigned char SubBFlag=0;
+1136   1          SW_ADD=1;
+1137   1          if((SW_ADD==0x00)&&(AddBFlag==0xAA))
+1138   1          {
+1139   2              AddDelay++;
+1140   2              if(AddDelay>SW_L)
+1141   2              {
+1142   3                  AddDelay=0;
+1143   3      //            CtrBuz(0x01);
+1144   3                  AddBFlag=0x00;
+1145   3                  ButAdjPTo(Type,0x01);//表示当前参数增加
+1146   3              }
+1147   2          }
+1148   1          else
+1149   1          {
+1150   2              AddBFlag=0xAA;
+1151   2          }
+1152   1          SW_SUB=1;
+1153   1          if((SW_SUB==0x00)&&(SubBFlag==0xAA))
+1154   1          {
+1155   2              SubDelay++;
+1156   2              if(SubDelay>SW_L)
+1157   2              {
+1158   3                  ButAdjPTo(Type,0x02);//表示当前参数减少
+1159   3      //            CtrBuz(0x01);
+1160   3                  SubDelay=0;
+1161   3                  SubBFlag=0x00;
+1162   3              }
+1163   2          }
+1164   1          else
+1165   1          {
+1166   2              SubBFlag=0xAA;
+1167   2          }
+1168   1      }
+1169          
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 20  
+
+1170          //void SetModeLEDCtr1()
+1171          //{
+1172          //    static unsigned char temp=0;
+1173          //    if(TimeCc1>(ONES/2))
+1174          //    {
+1175          //        TimeCc1=0;
+1176          //        if(LedOnOff1==0)
+1177          //        {
+1178          //            temp = disStemLed;
+1179          //            disStemLed=0;
+1180          //            LedOnOff1=0x01;
+1181          //        }
+1182          //        else
+1183          //        {
+1184          //            disStemLed=temp;
+1185          //            LedOnOff1=0x00;
+1186          //        }
+1187          //    }
+1188          //}
+1189          
+1190          //void SetModeLEDCtr()
+1191          //{
+1192          //    static unsigned char temp=0;
+1193          //    if(TimeCc>(ONES/2))
+1194          //    {
+1195          //        TimeCc=0;
+1196          //        if(LedOnOff==0)
+1197          //        {
+1198          //            temp = disCofLed;
+1199          //            disCofLed=0;
+1200          //            LedOnOff=0x01;
+1201          //        }
+1202          //        else
+1203          //        {
+1204          //            disCofLed=temp;
+1205          //            LedOnOff=0x00;
+1206          //        }
+1207          //    }
+1208          //}
+1209          
+1210          void SetModeLEDCtr1(unsigned char which)
+1211          {
+1212   1          unsigned char temp;
+1213   1          if(which)
+1214   1          {
+1215   2              temp=Temp1;
+1216   2          }
+1217   1          else
+1218   1          {
+1219   2              temp=Temp2;
+1220   2          }
+1221   1          if(TimeCc1>(ONES/2))
+1222   1          {
+1223   2              TimeCc1=0;
+1224   2              if(LedOnOff1==0)
+1225   2              {
+1226   3                  DisplayZ(temp,0);
+1227   3                  LedOnOff1=0x01;
+1228   3              }
+1229   2              else
+1230   2              {
+1231   3                  DisplayZ(0,4);
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 21  
+
+1232   3                  LedOnOff1=0x00;
+1233   3              }
+1234   2          }
+1235   1      }
+1236          
+1237          void SetModeLEDCtr(unsigned char onoff)
+1238          {
+1239   1          if(onoff)
+1240   1          {
+1241   2              if(TimeCc>(ONES/2))
+1242   2              {
+1243   3                  TimeCc=0;
+1244   3                  if(LedOnOff==0)
+1245   3                  {
+1246   4                      DisplayC(SetTemp,0);
+1247   4                      LedOnOff=0x01;
+1248   4                  }
+1249   3                  else
+1250   3                  {
+1251   4                      DisplayC(0,4);
+1252   4                      LedOnOff=0x00;
+1253   4                  }
+1254   3              }
+1255   2          }
+1256   1      }
+1257          
+1258          
+1259          void BuzCtr()
+1260          {
+1261   1          static unsigned char On=0;
+1262   1          if(swWorkState==WORK_STATE_DOWN||StemWork==OPT_STATE_DOWN)
+1263   1          {
+1264   2              return;
+1265   2          }
+1266   1          switch(ADKEY)
+1267   1          {
+1268   2          case AD_SIG_KEY:
+1269   2          case AD_DU_KEY:
+1270   2          case AD_TMP1_KEY:
+1271   2          case AD_TMP2_KEY:
+1272   2          case AD_CLEAR_KEY:
+1273   2          case AD_SET_KEY:
+1274   2              if(On==0)
+1275   2              {
+1276   3                  On=1;
+1277   3                  CtrBuz(0x01);
+1278   3              }
+1279   2              break;
+1280   2          default:
+1281   2              On=0;
+1282   2              break;
+1283   2          }
+1284   1      
+1285   1      }
+1286          
+1287          
+1288          //void RunningLamp()
+1289          //{
+1290          //    static unsigned char Down=0;
+1291          //    ADKEY = GetADKey();
+1292          //    switch(ADKEY)
+1293          //    {
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 22  
+
+1294          //    case AD_SIG_KEY:
+1295          //        Down=1;
+1296          //        disCofLed=0x01;
+1297          //        break;
+1298          //    case AD_DU_KEY:
+1299          //        Down=1;
+1300          //        disCofLed=0x02;
+1301          //        break;
+1302          //    }
+1303          //    if(Down==0)
+1304          //    {
+1305          //        if(CtrLedTime<1*ONES)//灯交替闪烁
+1306          //        {
+1307          //            disCofLed=0x01;
+1308          //        }
+1309          //        else if(CtrLedTime<2*ONES)
+1310          //        {
+1311          //            disCofLed=0x02;
+1312          //        }
+1313          //        else
+1314          //        {
+1315          //            CtrLedTime=0;
+1316          //        }
+1317          //    }
+1318          //}
+1319          
+1320          //做咖啡任务
+1321          void ProWorkState(void)
+1322          {
+1323   1          switch(swWorkState)
+1324   1          {
+1325   2          case WORK_STATE_INIT://初始化
+1326   2              GetCurTmp();
+1327   2              CheckCoffTemp();
+1328   2              disCofLed=0x03;
+1329   2              if(CafTemp>COFE_LIMT)
+1330   2              {
+1331   3                  DisplayC(COFE_LIMT,0);
+1332   3              }
+1333   2              else
+1334   2              {
+1335   3                  DisplayC(CafTemp,0);
+1336   3              }
+1337   2              CtrBeng(0x01);//开水泵
+1338   2              swWorkState=WORK_STATE_BENG;
+1339   2              TimeCc=0;
+1340   2              break;
+1341   2          case WORK_STATE_BENG:
+1342   2              if(TimeCc>(3*ONES))
+1343   2              {
+1344   3                  if(WaterFlag==1)
+1345   3                  {
+1346   4                      CtrBeng(0x00);
+1347   4                  }
+1348   3                  TimeCc=0;
+1349   3                  swWorkState=WORK_STATE_RHEAT;
+1350   3              }
+1351   2              break;
+1352   2          case WORK_STATE_RHEAT:
+1353   2              if(BengCtrTime>0.5*ONES)
+1354   2              {
+1355   3                  BengCtrTime=0;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 23  
+
+1356   3                  GetCurTmp();
+1357   3              }
+1358   2              if(CafTemp<COFE_TMP)//咖啡温度小于设定
+1359   2              {
+1360   3                  if(CafTemp<85&&CofHeat==0)
+1361   3                  {
+1362   4                      CofHeat=1;
+1363   4                      CtrCoffeHeat(0x01);//全功率
+1364   4                  }
+1365   3                  else if(CafTemp>85)
+1366   3                  {
+1367   4                      if(TimeCc<3*ONES&&CofHeat==0)
+1368   4                      {
+1369   5                          CofHeat=1;
+1370   5                          CtrCoffeHeat(0x01);
+1371   5                      }
+1372   4                      else if(TimeCc<5*ONES&&CofHeat==1)
+1373   4                      {
+1374   5                          CofHeat=0;
+1375   5                          CtrCoffeHeat(0x00);
+1376   5                      }
+1377   4                      else
+1378   4                      {
+1379   5                          TimeCc=0;
+1380   5                      }
+1381   4                  }
+1382   3                  if(CafTemp>COFE_LIMT)//实时显示温度值
+1383   3                  {
+1384   4                      DisplayC(COFE_LIMT,0);
+1385   4                  }
+1386   3                  else
+1387   3                  {
+1388   4                      DisplayC(CafTemp,0);
+1389   4                  }
+1390   3                  CheckCofButSet();
+1391   3              }
+1392   2              else
+1393   2              {
+1394   3                  TimeCc=0;
+1395   3                  CtrCoffeHeat(0x00);
+1396   3                  swWorkState=WORK_STATE_RUN;
+1397   3              }
+1398   2              break;
+1399   2          case WORK_STATE_RUN://等待操作
+1400   2              if(CafTemp>COFE_LIMT)
+1401   2              {
+1402   3                  DisplayC(COFE_LIMT,0);
+1403   3              }
+1404   2              else
+1405   2              {
+1406   3                  DisplayC(CafTemp,0);
+1407   3              }
+1408   2              CheckCofButSet();
+1409   2              break;
+1410   2          case WORK_STATE_WAIT:
+1411   2              CtrBeng(0x01);
+1412   2              CtrK2(0x01);
+1413   2              MakTim=0;
+1414   2              TimeCc=0;
+1415   2              CheckCofExit();
+1416   2              swWorkState=WORK_STATE_PER;
+1417   2              break;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 24  
+
+1418   2          case WORK_STATE_PER:
+1419   2              if(TimeCc>(1*ONES))
+1420   2              {
+1421   3                  CtrBeng(0x00);//关水泵
+1422   3                  CtrK2(0x00);//关咖啡电磁阀
+1423   3                  swWorkState= WORK_STATE_PAO;
+1424   3                  TimeCc=0;
+1425   3              }
+1426   2              if(CafTemp>COFE_LIMT)
+1427   2              {
+1428   3                  DisplayC(COFE_LIMT,0);
+1429   3              }
+1430   2              else
+1431   2              {
+1432   3                  DisplayC(CafTemp,0);
+1433   3              }
+1434   2      
+1435   2              CheckCofExit();
+1436   2              break;
+1437   2          case WORK_STATE_PAO:
+1438   2              if(TimeCc>(YuPaoT*ONES))//浸泡时间
+1439   2              {
+1440   3                  CtrBeng(0x01);//开启水泵
+1441   3                  CtrK2(0x01);
+1442   3                  swWorkState= WORK_STATE_OUT;
+1443   3                  if(SigFlag==0xAA)
+1444   3                  {
+1445   4      
+1446   4                      MkCafeTime=22*ONES;
+1447   4                  }
+1448   3                  else if(DubFlag==0xAA)
+1449   3                  {
+1450   4      
+1451   4                      MkCafeTime=37*ONES;
+1452   4                  }
+1453   3                  TimeCc=0;
+1454   3              }
+1455   2              if(CafTemp>COFE_LIMT)
+1456   2              {
+1457   3                  DisplayC(COFE_LIMT,0);
+1458   3              }
+1459   2              else
+1460   2              {
+1461   3                  DisplayC(CafTemp,0);
+1462   3              }
+1463   2              CheckCofExit();
+1464   2              break;
+1465   2          case WORK_STATE_OUT://出咖啡
+1466   2              if(TimeCc>MkCafeTime)
+1467   2              {
+1468   3                  CtrBeng(0x00);
+1469   3                  CtrK2(0x00);
+1470   3                  SigFlag=0x00;
+1471   3                  DubFlag=0x00;
+1472   3                  TimeCc=0;
+1473   3                  swWorkState= WORK_STATE_RUN;
+1474   3              }
+1475   2              if(CafTemp>COFE_LIMT)
+1476   2              {
+1477   3                  DisplayC(COFE_LIMT,0);
+1478   3              }
+1479   2              else
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 25  
+
+1480   2              {
+1481   3                  DisplayC(CafTemp,0);
+1482   3              }
+1483   2              CheckCofExit();
+1484   2              break;
+1485   2          case WORK_STATE_SET://设置单杯时间
+1486   2              SetModeLEDCtr(onoff);//动态显示
+1487   2              ButAdjPro(SETTEMP);//参数值调整 加或者减
+1488   2              CheckCofExit();//检查是否有杯数按键模式设置
+1489   2              break;
+1490   2          case WORK_STATE_ERR://系统错误
+1491   2              PowerSleep();
+1492   2              DisplayC(0,3);
+1493   2              if(ErrCode==1)
+1494   2              {
+1495   3                  if(TimeCc>0.5*ONES)
+1496   3                  {
+1497   4                      TimeCc=0;
+1498   4                      GetCurTmp();
+1499   4                  }
+1500   3                  if(CheckCoffTemp()==0)
+1501   3                  {
+1502   4                      swWorkState=WORK_STATE_INIT;
+1503   4                  }
+1504   3              }
+1505   2              break;
+1506   2          case WORK_STATE_DOWN:
+1507   2              PowerSleep();
+1508   2              DisplayC(0,4);
+1509   2              disCofLed=0;
+1510   2              break;
+1511   2          default:
+1512   2              break;
+1513   2          }
+1514   1      }
+1515          
+1516          //蒸汽任务
+1517          void SteamWork(void)
+1518          {
+1519   1          switch(StemWork)
+1520   1          {
+1521   2          case OPT_STATE_INIT:
+1522   2              disStemLed=0x07;
+1523   2              TimeCc1=0;
+1524   2              StemWork=OPT_STATE_IDLE;
+1525   2              break;
+1526   2          case OPT_STATE_IDLE:
+1527   2              if(WaterFlag==1)
+1528   2              {
+1529   3                  if(SenTemp<35)
+1530   3                  {
+1531   4                      DisplayZ(0,1);
+1532   4                  }
+1533   3                  else
+1534   3                  {
+1535   4                      DisplayZ(SenTemp,0);
+1536   4                  }
+1537   3              }
+1538   2              else
+1539   2              {
+1540   3                  DisplayZ(0,2);
+1541   3              }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 26  
+
+1542   2              CheckSteamButSet();
+1543   2              break;
+1544   2          case OPT_STATE_HEAD:
+1545   2              if(TimeCc1>(0.5*ONES))
+1546   2              {
+1547   3                  TimeCc1=0;
+1548   3                  GetSteamTmp();
+1549   3              }
+1550   2              if(SenTemp<35)
+1551   2              {
+1552   3                  DisplayZ(0,1);
+1553   3              }
+1554   2              else
+1555   2              {
+1556   3                  DisplayZ(SenTemp,0);
+1557   3              }
+1558   2              if(SenTemp>=ZetTmp)
+1559   2              {
+1560   3                  CtrSteam(0x00);             //关闭出蒸汽阀
+1561   3                  StemWork=OPT_STATE_IDLE;
+1562   3              }
+1563   2              CheckStemExit();
+1564   2              break;
+1565   2          case OPT_STATE_CLERA:               //清洁
+1566   2              if(TimeCc1>1.5*ONES)
+1567   2              {
+1568   3                  TimeCc1=0;
+1569   3                  CtrSteam(0x00);
+1570   3                  StemWork=OPT_STATE_IDLE;
+1571   3              }
+1572   2              CheckStemExit();
+1573   2              break;
+1574   2          case OPT_STATE_SETMP1:
+1575   2              SetModeLEDCtr1(1);//动态显示
+1576   2              ButAdjPro(TMP1B_VAL);//参数值调整 加或者减
+1577   2              CheckStemExit();
+1578   2              break;
+1579   2          case OPT_STATE_SETMP2:
+1580   2              SetModeLEDCtr1(0);//动态显示
+1581   2              ButAdjPro(TMP2B_VAL);//参数值调整 加或者减
+1582   2              CheckStemExit();
+1583   2              break;
+1584   2          case OPT_STATE_ERR:
+1585   2              DisplayZ(0,3);
+1586   2              PowerSleep1();
+1587   2              if(ErrCode1==2)
+1588   2              {
+1589   3                  if(TimeCc1>0.5*ONES)
+1590   3                  {
+1591   4                      TimeCc1=0;
+1592   4                      GetSteamTmp();
+1593   4                  }
+1594   3                  if(CheckStemTemp()==0)
+1595   3                  {
+1596   4                      StemWork=OPT_STATE_INIT;
+1597   4                  }
+1598   3              }
+1599   2              break;
+1600   2          case OPT_STATE_DOWN:
+1601   2              PowerSleep1();
+1602   2              DisplayZ(0,4);
+1603   2              disStemLed=0;
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 27  
+
+1604   2              break;
+1605   2          }
+1606   1      }
+1607          
+1608          void UpdateLED(unsigned char disDat)
+1609          {
+1610   1          if((disDat&0x01)>0)
+1611   1          {
+1612   2              LED_A=1;
+1613   2          }
+1614   1          else
+1615   1          {
+1616   2              LED_A=0;
+1617   2          }
+1618   1          if((disDat&0x02)>0)
+1619   1          {
+1620   2              LED_B=1;
+1621   2          }
+1622   1          else
+1623   1          {
+1624   2              LED_B=0;
+1625   2          }
+1626   1          if((disDat&0x04)>0)
+1627   1          {
+1628   2              LED_C=1;
+1629   2          }
+1630   1          else
+1631   1          {
+1632   2              LED_C=0;
+1633   2          }
+1634   1          if((disDat&0x08)>0)
+1635   1          {
+1636   2              LED_D=1;
+1637   2          }
+1638   1          else
+1639   1          {
+1640   2              LED_D=0;
+1641   2          }
+1642   1          if((disDat&0x10)>0)
+1643   1          {
+1644   2              LED_E=1;
+1645   2          }
+1646   1          else
+1647   1          {
+1648   2              LED_E=0;
+1649   2          }
+1650   1          if((disDat&0x20)>0)
+1651   1          {
+1652   2              LED_F=1;
+1653   2          }
+1654   1          else
+1655   1          {
+1656   2              LED_F=0;
+1657   2          }
+1658   1          if((disDat&0x40)>0)
+1659   1          {
+1660   2              LED_G=1;
+1661   2          }
+1662   1          else
+1663   1          {
+1664   2              LED_G=0;
+1665   2          }
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 28  
+
+1666   1          if((disDat&0x80)>0)
+1667   1          {
+1668   2              LED_H=1;
+1669   2          }
+1670   1          else
+1671   1          {
+1672   2              LED_H=0;
+1673   2          }
+1674   1      }
+1675          //显示位置                          0   1    2    3    4    5    6    7    8    9    P    E    C    -    0
+             -x0E   F    L
+1676          unsigned char xdata distable[18]= {0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f,0x73,0x79,0x39,0x40,0
+             -x00,0x71,0x38,0xFF};
+1677          void FlashLed(void)
+1678          {
+1679   1          static unsigned char dispos=0;
+1680   1          unsigned char dat1;
+1681   1          TimeCc++;
+1682   1          TimeCc1++;
+1683   1          AutCtrTime++;
+1684   1          AutTempTime++;
+1685   1          CofAutCtrTime++;
+1686   1          StemAutCtrTime++;
+1687   1          BengCtrTime++;
+1688   1          MakTim++;
+1689   1          LED_COM1=0;
+1690   1          LED_COM2=0;
+1691   1          LED_COM3=0;
+1692   1          LED_COM4=0;
+1693   1          LED_COM5=0;
+1694   1          LED_COM6=0;
+1695   1          LED_COM7=0;
+1696   1          dispos++;
+1697   1          switch(dispos)
+1698   1          {
+1699   2          case 1://表示咖啡显示第一位
+1700   2              dat1=distable[Cafone];
+1701   2              UpdateLED(dat1);
+1702   2              LED_COM3=1;
+1703   2              break;
+1704   2          case 2://表示咖啡显示第二位
+1705   2              dat1=distable[Caftwo];
+1706   2              UpdateLED(dat1);
+1707   2              LED_COM2=1;
+1708   2              break;
+1709   2          case 3://表示咖啡显示第三位
+1710   2              dat1=distable[Cafthr];
+1711   2              UpdateLED(dat1);
+1712   2              LED_COM1=1;
+1713   2              break;
+1714   2          case 4://表示蒸汽显示第一位
+1715   2              dat1=distable[Zheone];
+1716   2              UpdateLED(dat1);
+1717   2              LED_COM4=1;
+1718   2              break;
+1719   2          case 5://表示蒸汽显示第二位
+1720   2              dat1=distable[Zhetwo];
+1721   2              UpdateLED(dat1);
+1722   2              LED_COM5=1;
+1723   2              break;
+1724   2          case 6://表示蒸汽显示第三位
+1725   2              dat1=distable[Zhethr];
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 29  
+
+1726   2              UpdateLED(dat1);
+1727   2              LED_COM6=1;
+1728   2              break;
+1729   2          case 7://按键灯显示
+1730   2              LED_A=0;
+1731   2              LED_B=0;
+1732   2              LED_C=0;
+1733   2              LED_D=0;
+1734   2              LED_E=0;
+1735   2              if((disCofLed&0x01)>0)
+1736   2              {
+1737   3                  LED_E=1;
+1738   3              }
+1739   2              if((disCofLed&0x02)>0)
+1740   2              {
+1741   3                  LED_D=1;
+1742   3              }
+1743   2              if((disStemLed&0x01)>0)
+1744   2              {
+1745   3                  LED_C=1;
+1746   3              }
+1747   2              if((disStemLed&0x02)>0)
+1748   2              {
+1749   3                  LED_B=1;
+1750   3              }
+1751   2              if((disStemLed&0x04)>0)
+1752   2              {
+1753   3                  LED_A=1;
+1754   3              }
+1755   2              LED_COM7=1;
+1756   2              break;
+1757   2          default:
+1758   2              dispos=0;
+1759   2              break;
+1760   2          }
+1761   1      }
+1762          void CheckTemp()//热电偶检测
+1763          {
+1764   1          if(AutTempTime>0.5*ONES)
+1765   1          {
+1766   2              AutTempTime=0;
+1767   2              GetSteamTmp();
+1768   2          }
+1769   1          CheckStemTemp();
+1770   1      }
+1771          
+1772          unsigned char  CheckStemTemp(void)
+1773          {
+1774   1          if((SenTemp<1)||(SenTemp>200))
+1775   1          {
+1776   2              ErrCode1=2;//表示热电偶故障
+1777   2              StemWork=OPT_STATE_ERR;
+1778   2              return 1;
+1779   2          }
+1780   1          return 0;
+1781   1      }
+1782          
+1783          unsigned char  CheckCoffTemp(void)
+1784          {
+1785   1          if((CafTemp<1)||(CafTemp>200))
+1786   1          {
+1787   2              ErrCode=1;//表示NTC故障
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 30  
+
+1788   2              swWorkState=WORK_STATE_ERR;
+1789   2              return 1;
+1790   2          }
+1791   1          return 0;
+1792   1      }
+1793          
+1794          void Start(void)
+1795          {
+1796   1          Cafone=0x11;
+1797   1          Caftwo=0x11;
+1798   1          Cafthr=0x11;
+1799   1          Zheone=0x11;
+1800   1          Zhetwo=0x11;
+1801   1          Zhethr=0x11;
+1802   1          disCofLed =0x03;
+1803   1          disStemLed =0x07;
+1804   1      }
+1805          
+1806          void CheckPowerKey(void)//电源检测
+1807          {
+1808   1          if(GetPower()==0x01)
+1809   1          {
+1810   2              if((PowerFlag==0xAA)&&(swWorkState==WORK_STATE_DOWN))
+1811   2              {
+1812   3                  TimeCc=0;
+1813   3                  Start();
+1814   3                  Delay(5000);
+1815   3                  swWorkState=WORK_STATE_INIT;
+1816   3                  StemWork=OPT_STATE_INIT;
+1817   3              }
+1818   2              else if(PowerFlag==0)
+1819   2              {
+1820   3                  StemWork=OPT_STATE_DOWN;
+1821   3                  swWorkState=WORK_STATE_DOWN;
+1822   3              }
+1823   2          }
+1824   1      }
+1825          
+1826          void CofeTemCtrAuto(void)//咖啡煲温度自动控制
+1827          {
+1828   1          if(CofAutCtrTime>0.5*ONES)
+1829   1          {
+1830   2              CofAutCtrTime=0;
+1831   2              GetCurTmp();
+1832   2              CheckCoffTemp();
+1833   2          }
+1834   1          if(swWorkState<WORK_STATE_SET&&swWorkState>WORK_STATE_RUN)
+1835   1          {
+1836   2              if(CofHeat==0)
+1837   2              {
+1838   3                  CofHeat=1;
+1839   3                  CtrCoffeHeat(0x01);
+1840   3              }
+1841   2              else if(CofHeat==1)
+1842   2              {
+1843   3                  CofHeat=0;
+1844   3                  CtrCoffeHeat(0x00);
+1845   3              }
+1846   2          }
+1847   1          else if(swWorkState==WORK_STATE_RUN)
+1848   1          {
+1849   2              if(CofHeat==0&&CafTemp<COFE_TMP)
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 31  
+
+1850   2              {
+1851   3                  CofHeat=1;
+1852   3                  CtrCoffeHeat(0x01);
+1853   3              }
+1854   2              else if(CofHeat==1&&CafTemp>=COFE_TMP)
+1855   2              {
+1856   3                  CofHeat=0;
+1857   3                  CtrCoffeHeat(0x00);
+1858   3              }
+1859   2          }
+1860   1      }
+1861          
+1862          void SteamCtrAuto(void)//蒸汽水位和蒸汽煲温度实时控制
+1863          {
+1864   1      
+1865   1          static unsigned char ShuiTime=0;
+1866   1          static unsigned char ShuiTime1=0;
+1867   1          static unsigned char AddWater=0;
+1868   1      //***************************************************************
+1869   1          if(StemAutCtrTime>(0.5*ONES))
+1870   1          {
+1871   2              StemAutCtrTime=0;
+1872   2              if(StemWork<OPT_STATE_ERR)//表示要进行加热、检测温度、检测水位 循环控制
+1873   2              {
+1874   3                  GetPop();
+1875   3                  if(PushFlag==0x00&&HeatState==0&&WaterFlag==1)//检测压力开关
+1876   3                  {
+1877   4                      HeatState=1;
+1878   4                      CtrZhenQI(0x01);
+1879   4                  }
+1880   3                  else if(PushFlag==0xAA&&HeatState==1)
+1881   3                  {
+1882   4                      HeatState=0;
+1883   4                      CtrZhenQI(0x00);
+1884   4                  }
+1885   3                  GetShuiWei();
+1886   3                  if(swWorkState>WORK_STATE_OUT&&swWorkState<WORK_STATE_RUN)
+1887   3                  {
+1888   4                      CtrK1(0x00);
+1889   4                      return;
+1890   4                  }
+1891   3                  switch(ShuiFlag)
+1892   3                  {
+1893   4                  case 1:       //表示已经满水
+1894   4                      if(WaterFlag==0)
+1895   4                      {
+1896   5                          ShuiTime1++;
+1897   5                          if(ShuiTime1>BU_FULL)//补水10秒
+1898   5                          {
+1899   6                              AddWater=0;
+1900   6                              WaterFlag=1;
+1901   6                              ShuiTime1=0;
+1902   6                              CtrK1(0x00);
+1903   6                          }
+1904   5                      }
+1905   4                      else if(swWorkState>WORK_STATE_OUT||swWorkState==WORK_STATE_RHEAT||swWorkState==WORK_STATE
+             -_RUN)
+1906   4                      {
+1907   5                          CtrBeng(0x00);
+1908   5                      }
+1909   4                      break;
+1910   4                  case 0:     //需要补水
+C51 COMPILER V9.54   MAIN                                                                  03/19/2021 09:02:31 PAGE 32  
+
+1911   4                      if(AddWater==0)
+1912   4                      {
+1913   5                          ShuiTime=0;
+1914   5                          AddWater=1;
+1915   5                          WaterFlag=0;
+1916   5                          CtrBeng(0x01);
+1917   5                          CtrK1(0x01);
+1918   5                      }
+1919   4                      ShuiTime++;
+1920   4                      if(ShuiTime>BU_2MIN)//表示补水超过2分钟
+1921   4                      {
+1922   5                          CtrK1(0x00);
+1923   5                          AddWater=0;
+1924   5                          ShuiTime=0;
+1925   5                          ErrCode1=3;
+1926   5                          StemWork=OPT_STATE_ERR;
+1927   5                      }
+1928   4                      break;
+1929   4                  default:
+1930   4                      break;
+1931   4                  }
+1932   3              }
+1933   2          }
+1934   1      }
+1935          
+1936          void main(void)
+1937          {
+1938   1          GPIO_Init();
+1939   1          init_UART0();
+1940   1          ADC_Init();
+1941   1          TIMER0_initialize();
+1942   1          EA   = 1;
+1943   1          ReadTmp1BEeprom();
+1944   1          ReadTmp2BEeprom();
+1945   1          ReadSetTempEeprom();
+1946   1          DisplayC(0,4);
+1947   1          DisplayZ(0,4);
+1948   1          while(1)
+1949   1          {
+1950   2              CheckPowerKey();
+1951   2              ProWorkState();
+1952   2              SteamWork();
+1953   2              BuzCtr();
+1954   2              SteamCtrAuto();
+1955   2              CofeTemCtrAuto();
+1956   2              CheckTemp();
+1957   2              Delay(10);
+1958   2          }
+1959   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4814    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     69       5
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     30      29
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

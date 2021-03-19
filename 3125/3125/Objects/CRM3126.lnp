@@ -1,0 +1,8 @@
+".\Objects\STARTUP_OB38R08T1.obj",
+".\Objects\main.obj",
+".\Objects\WDT.obj",
+".\Objects\UART0.obj",
+".\Objects\Timer.obj",
+".\Objects\ADC.obj" 
+TO ".\Objects\CRM3126" 
+PRINT(".\Listings\CRM3126.m51") RAMSIZE(256) 

@@ -1,0 +1,1831 @@
+#include "OB38R08T1.h"
+#include "UART0.h"
+#include "EEPROM.h"
+#include "Timer.h"
+#include "ADC.h"
+
+
+//1:enable, 0:disable
+#define g_SleepCtrl     (*((unsigned char volatile xdata*)0x125))
+//Set this flag can skip touch detection after user wakes up MCU from power down mode by external interrupt
+#define ExtINTBreak     (*((unsigned char volatile xdata*)0xF7))
+
+#define DEFAULT_PAO   2
+#define DEFAULT_TMP   95
+#define DEFAULT_SLEEP 2
+#define DEFAULT_EXIT  0
+#define DEFAULT_SING  25  //单杯时间
+#define DEFAULT_DBU   40  //双杯时间
+#define DEFAULT_THR   50  //三杯时间
+#define DEFAULT_FOU   60  //四杯时间
+
+
+#define  JINPAOT   1//浸泡时间
+#define  CAFET     2//咖啡温度
+#define  ZHENQI    3//蒸汽温度
+#define  SLEEPT    4//休眠时间
+#define  SINGT     5//单杯时间
+#define  DUBT      6//双杯时间
+#define  THRT      7//三杯时间
+#define  FORT      8//四杯时间
+#define  EXITS     9//供水方式
+
+#define EC1_SLEEP  3360 //28分钟   28*60*2 0.5秒一个单位计时
+#define EC2_SLEEP  7200//60分钟
+#define EC3_SLEEP  10800//90分钟
+#define EC4_SLEEP  21600//180分钟
+
+unsigned long  xdata  SleepMinC=0;//休眠计时
+
+unsigned char  xdata  CoffTemp=0;//咖啡煲温度
+unsigned char  xdata  ZhenTemp=0;//蒸汽煲温度
+unsigned char  xdata  MsSate=0;//蒸汽按键状态
+unsigned char  xdata  ShuiInFlag=0;//水位开关检测
+unsigned char  xdata  ShuiXiangFlag=0;//水箱检测
+
+unsigned char  xdata  YuPaoT=19;//表示预浸泡时间
+unsigned char  xdata  SetTemp=85;//设定蒸汽温度
+unsigned char  xdata  ZetTmp=125;//蒸汽温度
+unsigned char  xdata  SleepT=1;//休眠设置
+unsigned char  xdata  ExitShui=0;//外部水箱标志 F0表示内部 F1表示外部
+unsigned char  xdata  ErrCode=0;//存储错误代码
+
+unsigned char xdata PowerState=0;//电源开关状态标志 0xAA 表示电源开启
+unsigned char xdata PushFlag=0;//压力传感器标志
+unsigned char xdata CaffeFlag=0xAA;//咖啡按键
+
+unsigned int xdata MkCafeTime=0;
+
+unsigned int xdata SingTime=0;//单杯时间
+unsigned int xdata DbuTime=0;//双杯时间
+unsigned int xdata ThrTime=0;//三杯时间
+unsigned int xdata FouTime=0;//四杯时间
+
+unsigned char  xdata BoShuiFlag=0x00;//补水标志
+unsigned char xdata CafHeatFlag=0;
+
+unsigned char xdata HandKFlag=0;
+unsigned char xdata SigKFlag=0;
+unsigned char xdata DubKFlag=0;
+unsigned char xdata ThrKFlag=0;
+unsigned char xdata FouKFlag=0;
+
+unsigned char xdata HandFlag=0;
+unsigned char xdata SigFlag=0;
+unsigned char xdata DubFlag=0;
+unsigned char xdata ThrFlag=0;
+unsigned char xdata FouFlag=0;
+
+unsigned int xdata TimeCc=0;//状态机计时
+unsigned int xdata AutCtrTime=0;
+unsigned int xdata MakTim=0;//制作计时
+
+unsigned char  xdata ExitShuiT=0;//外部补水计时
+
+
+unsigned int xdata HkeyVal=0;
+unsigned int xdata DkeyVal=0;
+unsigned int xdata LkeyVal=0;//
+unsigned int xdata HEkeyVal=0;
+
+unsigned char xdata  FengMinFlag=0;
+
+
+unsigned short xdata LedFlash=0x00;//LED闪
+unsigned char xdata disone=0;
+unsigned char xdata distwo=0;
+unsigned char xdata disthr=0;
+unsigned char xdata dispos=0;
+unsigned char xdata disLp=0; 
+
+unsigned char xdata PwkFlag=0;
+unsigned char xdata MSFlag=0;
+unsigned char xdata CfFlag=0;//做咖啡标志
+void DisplayTmp(unsigned char Tmp,unsigned char tag);
+void DisplauCTmp(unsigned char Tmp);
+unsigned char CtrJinShuiF(unsigned char ctr);
+unsigned char CheckShuiXiang(void);
+
+#define  ONES          440///循环时间为1秒
+//********************************************************************
+//P0.4--->TK1---->K1
+//P0.5--->TK2---->K2
+
+#define	 K1 	P0_4
+#define	 K2 	P0_5
+//*******************************************************************
+//P3.2--->LED1---A
+//P3.0--->LED2---B
+//P1.6--->LED3---C
+//P3.4--->LED4---D
+//P3.3--->LED5---E
+//P3.1--->LED6---F
+//P1.7--->LED7---G
+
+//P0.7--->LEDCOM1
+//P1.0--->LEDCOM2
+//P1.1--->LEDCOM3
+//P1.4--->LEDCOM4
+#define	 LED_A 		P3_2
+#define	 LED_B 		P3_0
+#define	 LED_C 		P1_6
+#define	 LED_D 		P3_4
+#define	 LED_E 		P3_3
+#define	 LED_F 		P3_1
+#define	 LED_G 		P1_7
+
+#define	 LED_COM1 	P1_1
+#define	 LED_COM2 	P1_0
+#define	 LED_COM3 	P0_7
+#define	 LED_COM4 	P0_6
+
+#define SW_D  4
+#define SW_L  4
+//******************************************************************
+#define  SW_ADD         P2_5   //SW3
+#define  SW_SUB         P2_6   //SW4
+#define  SW_SET         P2_4  //SW2
+//*******************************************************************
+//P2.6--->RXD     
+//P2.5--->TXD
+#define	 RXD 	P1_5  
+#define	 TXD 	P1_4
+//*******************************************************************
+typedef enum _WORKState
+{
+    WORK_STATE_INIT     =     0,//系统初始化
+    WORK_STATE_SLEEP    =     1,//设置休眠时间EC1-EC5 
+    WORK_STATE_DOWN     =     2,//电源关状态 显示EC0
+    WORK_STATE_BENG     =     3,//泵水8秒钟
+    WORK_STATE_EXIT     =     4,//外部补水
+	WORK_STATE_ERR      =     5,//系统运行错误
+    //*************************************** 
+    WORK_STATE_RUN      =     8,//显示NTC实际温度
+    WORK_STATE_WAIT     =     9,//轮流开启阀门
+    WORK_STATE_PER      =     10,//预泡
+    WORK_STATE_PAO      =     11,//泡
+    WORK_STATE_OUT      =     12,//出咖啡 
+    //**********************************
+    WORK_STATE_SET_P    =     14,//设置浸泡时间 0-30
+    WORK_STATE_SET_C    =     15, //咖啡温度80-99度
+    WORK_STATE_SET_T    =     16,//设置温度80-135度
+    WORK_STATE_SET_S    =     17,//设置休眠休眠EC1-EC5
+    //************************************************
+    WORK_STATE_SINT     =     18,//单杯时间
+    WORK_STATE_DUBT     =     19,//双杯时间
+    WORK_STATE_THRT     =     20,//三杯时间
+    WORK_STATE_FOUT     =     21,//三杯时间
+    WORK_STATE_SET_E    =     22,//设置外部供水
+}WorkState;
+
+WorkState  swWorkState=WORK_STATE_INIT;//定义状态机
+
+
+#define  ESC_01  	0x1B
+#define  ESC_02  	0x2A
+
+//**********************************************************
+#define  CMD_CTMP  	0x01  //读取咖啡温度
+#define  CMD_ZTMP  	0x02  //读取蒸汽温度
+#define  CMD_SHUI       0x03  //读取水位
+#define  CMD_LIU        0x04  //读取流量 
+#define  CMD_COFE       0x05  //读取咖啡按键 
+#define  CMD_SHXI       0x06  //读取水箱状态
+#define  CMD_POP        0x07  //表示压力开关状态
+#define  CMD_MS         0x08  //获取蒸汽开关
+
+//************************************************************
+#define  CMD_CTBENG   	0x10  //表示控制泵抽水           CK6
+#define  CMD_CTZHEN  	0x11  //表示控制蒸汽进水阀       CK5
+#define  CMD_CTHEAT  	0x12  //表示控制热水电磁阀       CK4 
+#define  CMD_CTCFE      0x13  //表示控制咖啡出水电磁阀   CK3
+#define  CMD_CTZSHUI 	0x14  //表示控制咖啡进水阀       CK2
+#define  CMD_BK1 	0x15  //表示控制备用             CK1
+#define  CMD_LAMP       0x16  //灯控制开关               LAMP
+#define  CMD_CAFEH      0x17  //控制咖啡煲加热           PWM
+#define  CMD_ZHENH      0x18  //控制蒸气煲加热           CT2
+
+#define  CMD_BUZ        0x19  //控制蜂鸣器
+#define  CMD_SLEEP      0x1A  //表示控制休眠
+#define  CMD_PWR        0x20  //电源开关
+//***********************************************************
+
+#define  P_TO_DIS   	0x01 //电源板主机向上发送
+#define  DIS_TO_P   	0x02 //表示显示板向电源板发送
+#define  CMD_OK     	0xAA //表示收到指令成功
+#define  CMD_FAIL   	0x55 //表示失败
+
+unsigned char  CheckErrSen(void);
+unsigned char CtrBeng(unsigned char Ontime,unsigned char Offtime);
+void PowerSleep(void);
+
+#define TK0AVG  ((unsigned int volatile xdata*)0x178)				//key0平均值地址
+//========================================================================================================
+//  Command Read Format:
+//  Start    -> Slave(W) -> Ack -> Command -> Ack ->
+//  Re-Start -> Slave(R) -> Ack ->   0x00  -> Ack ->  TKSTATUS1  -> Ack -> TKSTATUS0 -> NAck -> Stop
+//
+//  Touch Slave(W) Address = 0x60
+//  Touch Slave(R) Address = 0x61
+//  Read Key Status Command Number = 0x17
+//
+//  [Master Example]
+//  Start    ->  0x60(W) -> Ack ->   0x17  -> Ack ->
+//  Re-Start ->  0x61(R) -> Ack ->   0x00  -> Ack ->  TKSTATUS1  -> Ack -> TKSTATUS0 -> NAck -> Stop
+//========================================================================================================
+void Timer_Init(void);
+void Slips_touch_scan();
+
+void TOUCH_ISR(void) interrupt d_TK_Vector using 1
+{
+    EA = 0;
+    ((void(code*)(void))0x2011)();      //Touch ISR Function
+    EA = 1;
+}
+
+void IIC_ISR(void) interrupt d_IIC_Vector using 2
+{
+    EA = 0;
+    ((void(code*)(void))0x200E)();      //IIC ISR Function
+    EA = 1;
+}
+
+void WDT_ISR(void) interrupt d_WDT_Vector
+{
+    ((void(code*)(void))0x200B)();      //WDT ISR Function
+}
+//********************************************************************************
+void  WritePaoEeprom(void)
+{
+  Write_EEPROM(JINPAOT,YuPaoT);
+}
+void  ReadPaoEeprom(void)
+{
+  	YuPaoT=Read_EEPROM(JINPAOT);
+	if(YuPaoT>30)//当读取值不在范围值 恢复默认值
+	{
+    	YuPaoT=DEFAULT_PAO;
+	    WritePaoEeprom();
+	}
+} 
+//*******************************************************************
+void  WriteTmpEeprom(void)
+{
+    Write_EEPROM(CAFET,SetTemp);
+}
+void  ReadTmpEeprom(void)
+{
+  	SetTemp=Read_EEPROM(CAFET);
+	if((SetTemp<80)||(SetTemp>99))
+	{
+	 SetTemp=DEFAULT_TMP;
+	 WriteTmpEeprom();
+	}
+}
+//******************************************************************
+void  WriteZhenEeprom(void)
+{
+    Write_EEPROM(ZHENQI,ZetTmp);
+}
+void  ReadZenEeprom(void)
+{
+  	ZetTmp=Read_EEPROM(ZHENQI);
+	if((ZetTmp<80)||(ZetTmp>135))
+	{
+	 ZetTmp=DEFAULT_TMP;
+	 WriteZhenEeprom();
+	}
+}
+//******************************************************************
+void  WriteSleepEeprom(void)
+{
+  Write_EEPROM(SLEEPT,SleepT);
+}
+void  ReadSleepEeprom(void)
+{
+  	SleepT=Read_EEPROM(SLEEPT);
+	if((SleepT<1)||(SleepT>5))
+	{
+	  SleepT=DEFAULT_SLEEP;
+	   WriteSleepEeprom();
+	}
+}
+//**************************************************************************
+void  WriteExitEeprom(void)
+{
+  Write_EEPROM(EXITS,ExitShui);
+}
+void  ReadExitEeprom(void)
+{
+  	ExitShui=Read_EEPROM(EXITS);
+	if(ExitShui>=2)
+	{
+	  ExitShui=DEFAULT_EXIT;
+	   WriteSleepEeprom();
+	}
+}
+
+//**********************************************************************************
+void  WriteSingEeprom(void)
+{
+  Write_EEPROM(SINGT,SingTime);
+}
+void  ReadSingEeprom(void)
+{
+  	SingTime=Read_EEPROM(SINGT);
+	if(SingTime>120)//当读取值不在范围值 恢复默认值
+	{
+    	SingTime=DEFAULT_SING;
+	    WriteSingEeprom();
+	}
+} 
+//**********************************************************************************
+void  WriteDbuEeprom(void)
+{
+  Write_EEPROM(DUBT,DbuTime);
+}
+void  ReadDbuEeprom(void)
+{
+  	DbuTime=Read_EEPROM(DUBT);
+	if(DbuTime>120)//当读取值不在范围值 恢复默认值
+	{
+    	    DbuTime=DEFAULT_DBU;
+	    WriteDbuEeprom();
+	}
+} 
+//**********************************************************************************
+void  WriteThrEeprom(void)
+{
+  Write_EEPROM(THRT,ThrTime);
+}
+void  ReadThrEeprom(void)
+{
+  	ThrTime=Read_EEPROM(THRT);
+	if(ThrTime>120)//当读取值不在范围值 恢复默认值
+	{
+    	ThrTime=DEFAULT_THR;
+	    WriteThrEeprom();
+	}
+} 
+//***********************************************************************************
+void  WriteFourEeprom(void)
+{
+  Write_EEPROM(FORT,FouTime);
+}
+void  ReadFourEeprom(void)
+{
+  	FouTime=Read_EEPROM(FORT);
+	if(FouTime>120)//当读取值不在范围值 恢复默认值
+	{
+    	    FouTime=DEFAULT_FOU;
+	    WriteFourEeprom();
+	}
+} 
+//********************************************************************************
+void Delay(unsigned int tim)
+{
+    unsigned int  i,j;
+    for (i=0; i<tim; i++)
+    for (j=0; j<100; j++);
+}
+
+//*******************************************************************
+#define TIME_OUT   200
+unsigned char  UART_Rxd_Process(unsigned char cmd)//处理显示相关指令
+{
+  unsigned char xdata pcmd=0,sdata1=0,sdata2=0,schecksum1,schecksum2;
+  unsigned short CheckSumDIS,CheckSumPo;
+  unsigned int timeOut=0;
+   while(1)
+    {
+      if(GetBufSize()>=8)
+      break;	
+      timeOut++;
+      Delay(10);
+      if(timeOut>TIME_OUT)
+      break;
+    }
+	if(GetBufSize()>=8)
+	{
+	 if(GetBufData()==ESC_01)//读取0x1B
+	 {
+	  if(GetBufData()==ESC_02)//读取0x2A
+	  {
+	   if(GetBufData()==P_TO_DIS)//0x02 表示显示屏到电源板指令
+	   {
+	   	 pcmd=GetBufData();
+	   	 sdata1=GetBufData();
+		 sdata2=GetBufData();
+		 schecksum1=GetBufData();
+		 schecksum2=GetBufData();
+		 CheckSumDIS=(schecksum1<<8)+schecksum2;
+		 CheckSumPo=ESC_01+ESC_02+P_TO_DIS+pcmd+sdata1+sdata2;
+		 if((CheckSumPo==CheckSumDIS)&&(pcmd==cmd))//
+		 {
+		   switch(pcmd)
+		   {
+			 case CMD_CTMP://读取咖啡温度
+			    CoffTemp=sdata1;
+			 break;
+			 case CMD_ZTMP://读取蒸汽温度
+			    ZhenTemp=sdata1;
+			 break;
+			case CMD_SHUI:
+			  ShuiInFlag=sdata1;
+		   	break;    
+			 case CMD_LIU://读取流量
+			 
+			 break;
+			 case CMD_COFE://
+		   	  CaffeFlag=sdata1;
+		   	break;
+			case CMD_SHXI://水箱
+		   	  ShuiXiangFlag=sdata1;
+		   	break;
+			case CMD_POP:
+		   	  PushFlag=sdata1;
+		   	break;
+			 case CMD_MS://获取蒸汽开关
+			   MsSate=sdata1;
+			 break;
+			 case CMD_PWR:
+			    PowerState=sdata1;
+			 break;
+			 case CMD_CTBENG: //表示控制泵抽水           
+			 case CMD_CTZHEN://表示控制蒸汽进水阀       
+			 case CMD_CTHEAT://表示控制热水电磁阀        
+			 case CMD_CTCFE://表示控制咖啡出水电磁阀   
+			 case CMD_CTZSHUI://表示控制咖啡进水阀       
+			 case CMD_BK1://表示控制备用     
+                         case CMD_LAMP://灯控制开关               
+			 case CMD_CAFEH://控制咖啡煲加热           
+			 case CMD_ZHENH://控制蒸气煲加热           
+			 case CMD_BUZ://控制蜂鸣器
+			 case CMD_SLEEP://表示控制休眠
+			 break;
+			 default:
+     			break;
+		   }
+		    return  0xAA;	
+		 }
+	   } 
+	  }
+	 }
+   }
+   return 0;
+}
+
+void UART_Txd_Cmd(unsigned char Cmd,unsigned char Parm1,unsigned char Parm2)
+{	
+        unsigned short CheckSum=0;
+                BufSizeClear();
+	 	UART0_TX(ESC_01);			
+ 	 	UART0_TX(ESC_02);
+ 	 	UART0_TX(DIS_TO_P);
+     	UART0_TX(Cmd);
+	 	UART0_TX(Parm1);
+	 	UART0_TX(Parm2);
+		CheckSum=ESC_01+ESC_02+DIS_TO_P+Cmd+Parm1+Parm2;
+	 	UART0_TX((CheckSum>>8)&0xFF);
+	 	UART0_TX(CheckSum&0xFF);		 
+}
+
+//***************************************************************************
+unsigned char GetCurTmp(void)//取得当前温度值
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CTMP,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_CTMP)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_CTMP,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_CTMP)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+unsigned char GetZhenQiTmp(void)//取得当前温度值
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_ZTMP,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_ZTMP)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_ZTMP,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_ZTMP)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+
+unsigned char ReadPowerBut(void)//读取电源开关
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_PWR,0x00,0x00);//
+  	if(UART_Rxd_Process(CMD_PWR)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_PWR,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_PWR)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+void CheckPowerKey(void)
+{
+     if(ReadPowerBut()==0x01)
+     {
+         if((PowerState==0xAA)&&(swWorkState==WORK_STATE_DOWN))
+         {
+  	       TimeCc=0;
+  	       DisplauCTmp(ZhenTemp);
+  	       CheckShuiXiang();
+  	        CtrBeng(0x01,0x00);//开水泵 
+            CtrJinShuiF(0x01);
+	        swWorkState=WORK_STATE_BENG;	
+         }
+         else if(PowerState==0)
+         {
+         	PowerSleep(); 
+         	swWorkState=WORK_STATE_DOWN;	
+         }
+     }
+}
+
+unsigned char GetXiangPosSwitch(void)//获取压力开关状态 转做水箱是否到位标志
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_POP,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_POP)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_POP,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_POP)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+unsigned char GetHandCoffeKey(void)//取得手动咖啡按键
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_COFE,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_COFE)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_COFE,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_COFE)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+
+unsigned char GetShuiWei(void)//取得当前水位状态
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_SHUI,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_SHUI)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_SHUI,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_SHUI)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+unsigned char GetShuiXiang(void)//获取水箱状态
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_SHXI,0x00,0x00);
+  	if(UART_Rxd_Process(CMD_SHXI)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_SHXI,0x00,0x00);
+  	  	if(UART_Rxd_Process(CMD_SHXI)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+
+unsigned char CtrK1(unsigned char ctr)//蒸汽进水电磁阀
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CTZHEN,ctr,0x00);
+  	if(UART_Rxd_Process(CMD_CTZHEN)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    	Delay(100);
+  	  	UART_Txd_Cmd(CMD_CTZHEN,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_CTZHEN)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+unsigned char CtrK2(unsigned char ctr)//咖啡出水电磁阀
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CTCFE,ctr,0x00);
+  	if(UART_Rxd_Process(CMD_CTCFE)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_CTCFE,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_CTCFE)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+//*********************************************************************************
+unsigned char CtrCoffeHeat(unsigned char ctr)//控制咖啡加热
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CAFEH,ctr,0x00);
+  	if(UART_Rxd_Process(CMD_CAFEH)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_CAFEH,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_CAFEH)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+unsigned char CtrZhenQI(unsigned char ctrOn,unsigned char ctrOff)//控制蒸汽加热
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_ZHENH,ctrOn,ctrOff);
+  	if(UART_Rxd_Process(CMD_ZHENH)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_ZHENH,ctrOn,ctrOff);
+  	  	if(UART_Rxd_Process(CMD_ZHENH)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+//*********************************************************************************
+unsigned char CtrBak1(unsigned char ctr)//控制备用自来水电磁阀  
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_BK1,ctr,0x00);
+  	if(UART_Rxd_Process(CMD_BK1)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_BK1,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_BK1)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+//************************************************************************************
+unsigned char CtrBeng(unsigned char Ontime,unsigned char Offtime)//控制蒸汽加热   
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CTBENG,Ontime,Offtime);
+  	if(UART_Rxd_Process(CMD_CTBENG)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_CTBENG,Ontime,Offtime);
+  	  	if(UART_Rxd_Process(CMD_CTBENG)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+
+unsigned char CtrJinShuiF(unsigned char ctr)//控制咖啡进水电磁阀
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_CTZSHUI,ctr,0x00);//
+  	if(UART_Rxd_Process(CMD_CTZSHUI)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<3;i++)
+  	  {
+  	  	UART_Txd_Cmd(CMD_CTZSHUI,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_CTZSHUI)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+//************************************************************************************
+unsigned char CtrBuz(unsigned char ctr)//蜂鸣器
+{
+	unsigned char i;
+  	UART_Txd_Cmd(CMD_BUZ,ctr,0x00);
+  	if(UART_Rxd_Process(CMD_BUZ)==0xAA)//返回成功
+  	{
+  	  return 0x01;	
+  	}
+  	else
+  	{
+  	  for(i=0;i<5;i++)
+  	  {
+	    Delay(100);
+  	  	UART_Txd_Cmd(CMD_BUZ,ctr,0x00);
+  	  	if(UART_Rxd_Process(CMD_BUZ)==0xAA)
+  	  	{
+  	  	 return 0x01;
+  	  	}	
+  	  }	
+  	}
+  	return 0x00;//不正常控制
+}
+//***********************************************************************************
+
+
+
+// 00 表示双向IO 
+// 01 表示推挽输出
+// 10 表示高阻输入
+// 11 表示开漏
+void GPIO_Init()
+{
+		P0 = 0x00;
+		P1 = 0x00;
+		P2 = 0x00;
+		P3 = 0x00;
+//P0.2 P0.3 P0.4 P0.5 P0.6 P0.7 电容触摸输入 准双向口 输出低
+//P0.0 P0.1 为LEDCOM1 LEDCOM2
+//      7  6  5  4  3  2  1  0
+//P0M1  0  0  0	 0	0  0  0	 0
+//P0M0  0  0  0	 0	0  0  1	 1
+		P0M1 = 0x20;//P0.0 P0.1 推挽输出 其它准双向口
+		P0M0 = 0xC0;
+//P1.0 电容触摸 P1.1 P1.2 AD输入 P1.3输出推挽 P1.4输入 P1.5输入 P1.6输出 P1.7输出
+//      7  6  5  4  3  2  1  0
+//P1M1  0  0  1	 1	0  1  1	 0
+//P1M0  1  1  0	 0	1  0  0	 0
+		P1M1 = 0x00;
+		P1M0 = 0xDF;
+//P2.3 输出 P2.5 输出 P2.6输入
+//      7  6  5  4  3  2  1  0
+//P2M1  0  0  0	 0	0  0  0	 0
+//P2M0  0  0  0	 0	1  0  0	 0
+	    P2M1 = 0x00;
+		P2M0 = 0x00;
+//P3.0 P3.1 P3.2为触摸板输入 P3.3 P3.4 P3.5为输出
+//      7  6  5  4  3  2  1  0
+//P3M1  0  0  0	 0	0  0  0	 0
+//P3M0  0  0  1	 1	1  0  0	 0
+//******************************************************
+		P3M1 = 0x00;
+		P3M0 = 0xFF;
+		K1=0;
+		K2=0;
+//********************************************************
+        LED_A=0;
+		LED_B=0;
+		LED_C=0;
+		LED_D=0;
+	    LED_E=0;
+		LED_F=0;
+		LED_G=0;
+		LED_COM1=1;
+		LED_COM2=1;
+		LED_COM3=1;
+		LED_COM4=1;	
+		TXD=1;
+		RXD=1; 
+//********************************************************
+}
+void DisplauCTmp(unsigned char Tmp)
+{
+  unsigned char DisTm=0;
+  if(Tmp>=SetTemp)
+  {
+    DisTm=SetTemp;
+  }
+  else
+  {
+    DisTm=Tmp;	
+  }	
+   DisplayTmp(DisTm,0);	
+}
+
+
+void DisplayTmp(unsigned char Tmp,unsigned char tag)
+{
+   if(tag==0)
+   {
+	if(Tmp>=100)
+   	{
+		disone=Tmp/100;//
+   		distwo=(Tmp%100)/10;
+   		disthr=(Tmp%100)%10;
+   	}else if(Tmp>=10)
+   	{
+   		disone=0x0E;//
+   		distwo=Tmp/10;
+   		disthr=Tmp%10;
+   	}
+   	else
+   	{
+   		disone=0x0E;//
+   		distwo=0x0E;
+   		disthr=Tmp%10;
+   	}
+    }
+    else if(tag==1)
+    {
+    	disone=0x0A;//
+        distwo=Tmp/10;
+   	disthr=Tmp%10;
+    	
+    }	
+    else if(tag==2)
+    {
+    	disone=0x0B;//
+        distwo=0x0C;
+   	disthr=Tmp;	
+    }	
+    else if(tag==3)
+    {
+    	disone=0x0C;//
+        distwo=Tmp/10;
+   	disthr=Tmp%10;
+    }	
+    else if(tag==4)
+    {
+    	disone=0x0E;//
+        distwo=0x0F;
+   	disthr=Tmp;
+    }	
+}
+void KarMak(void)
+{
+    unsigned char GetKey=0;
+	 if(CaffeFlag==0x00)//手动咖啡
+   	  {	//表示手动咖啡
+   	   
+   	       HandFlag=0xAA;
+   	       HandKFlag=0;
+	       swWorkState=WORK_STATE_WAIT;
+	       CtrBuz(0x01);
+	       TimeCc=0;
+		   disLp=0x00;
+		   TimeCc=0;
+   	  }
+   	  else
+   	  {
+   	    SigKFlag=0xAA;
+   	    DubKFlag=0xAA;
+   	    ThrKFlag=0xAA;
+   	    FouKFlag=0xAA;
+   	    LkeyVal=0;	
+   	  }
+}
+void PowerSleep(void)
+{
+  CtrBeng(0x00,0x00);//关闭水泵	
+  CtrCoffeHeat(0x00);//关闭加热
+  CafHeatFlag=0;
+  CtrZhenQI(0x00,0x00);
+  CtrJinShuiF(0x00);//
+  CtrK1(0x00);
+  CtrK2(0x00);
+  
+}
+unsigned char CheckShuiXiang(void)//检查水箱是否有水
+{
+   if(GetShuiXiang()==0x01)
+       {
+       	 if(ShuiXiangFlag==0)//表示水箱没有水
+       	 {
+       	     	 PowerSleep();
+       	     	 ErrCode=3;//	
+	    	     FengMinFlag=0;
+	    	     swWorkState=WORK_STATE_ERR;	
+	             return 1;		
+       	 }
+       }
+
+   return 0;
+}
+void CheckPowerOff(void)
+{
+     if(ReadPowerBut()==0x01)
+     {
+         if(PowerState==0x00)
+         {
+		 PowerSleep();
+         swWorkState=WORK_STATE_DOWN;	
+         }
+     }
+}
+
+
+void CheckEixtDo(void)//检查退出咖啡工作按键
+{
+   unsigned char GetADK=0;
+   static unsigned char Ctime=0;
+      if(HandFlag==0xAA)
+      {
+	   Ctime++;
+	   if(Ctime>20)
+	   {
+	     Ctime=0;
+	     GetHandCoffeKey();
+	     if(CaffeFlag==0xAA)//手动关闭
+	     {
+   	        CtrBeng(0x00,0x00);//关闭水泵
+   	        CtrBuz(0x01);
+	     	CtrK2(0x00);//关闭咖啡出水电磁阀
+	     	CtrJinShuiF(0x00);
+	     	HandFlag=0x00;
+	     	HandKFlag=0;
+                HEkeyVal=0;
+	     	swWorkState= WORK_STATE_RUN;	
+   	      }
+	    }		
+	 }
+}
+void CheckCupButSet(void)
+{
+      unsigned char AdKey=0;
+         AdKey=GetADKey();
+   	if(AdKey==AD_SIG_KEY)
+   	{
+   	   DisplayTmp(SingTime,0);
+   	   disLp=0x08;	
+   	   swWorkState=WORK_STATE_SINT;	
+   	}
+   	else if(AdKey==AD_DU_KEY)
+   	{
+   	   DisplayTmp(DbuTime,0);
+   	   disLp=0x04;
+   	  swWorkState=WORK_STATE_DUBT;
+   	}
+   	else if(AdKey==AD_THR_KEY)
+   	{
+   	  DisplayTmp(ThrTime,0);
+   	  disLp=0x02;
+   	   swWorkState=WORK_STATE_THRT;
+   	}
+   	else if(AdKey==AD_FOU_KEY)
+   	{
+   	  DisplayTmp(FouTime,0);
+   	  disLp=0x01;
+   	  swWorkState=WORK_STATE_FOUT;
+   	}			
+}
+
+void SetModeLEDCtr(unsigned char dis,unsigned char mod)
+{
+	static unsigned char LedOnOff=0;
+	 if(TimeCc>(ONES/4))
+  	 {
+	   TimeCc=0;
+	   if(LedOnOff==0)
+	   {
+		 DisplayTmp(dis,mod);	
+		 LedOnOff=0x01;
+	   }
+	   else
+	   {
+		  LedOnOff=0x00;
+		  disone=0x0E;
+   		  distwo=0x0E;
+   		  disthr=0x0E;
+	   }
+         }	
+}
+
+void ButAdjPTo(unsigned char Type,unsigned char Cal)
+{
+  switch(Type)
+  {
+    case JINPAOT://浸泡时间
+      if((YuPaoT<30)&&(Cal==1))
+      {
+   	   YuPaoT++;
+      }
+      else if((YuPaoT>0)&&(Cal==2))
+      {
+      	   YuPaoT--;
+      }
+      WritePaoEeprom();
+      DisplayTmp(YuPaoT,1);
+    break;
+    case CAFET://咖啡温度
+     if((SetTemp<99)&&(Cal==1))
+      {
+   	   SetTemp++;
+      }
+      else if((SetTemp>80)&&(Cal==2))
+      {
+      	   SetTemp--;
+      }
+      WriteTmpEeprom();
+      DisplayTmp(SetTemp,3);
+    break;
+    case ZHENQI://蒸汽温度
+      if((ZetTmp<135)&&(Cal==1))
+      {
+   	   ZetTmp++;
+      }
+      else if((ZetTmp>80)&&(Cal==2))
+      {
+      	   ZetTmp--;
+      }
+      WriteZhenEeprom();
+      DisplayTmp(ZetTmp,0);
+    break;
+    case SLEEPT://休眠时间
+      if((SleepT<5)&&(Cal==1))
+      {
+   	   SleepT++;
+      }
+      else if((SleepT>0)&&(Cal==2))
+      {
+      	   SleepT--;
+      }
+      WriteSleepEeprom();
+      DisplayTmp(SleepT,2);
+    break;
+    case SINGT://单杯时间
+      if((SingTime<120)&&(Cal==1))
+      {
+   	   SingTime++;
+      }
+      else if((SingTime>0)&&(Cal==2))
+      {
+      	   SingTime--;
+      }
+      WriteSingEeprom();
+      DisplayTmp(SingTime,0); 
+    break;
+    case DUBT://双杯时间
+      if((DbuTime<120)&&(Cal==1))
+      {
+   	   DbuTime++;
+      }
+      else if((DbuTime>0)&&(Cal==2))
+      {
+      	   DbuTime--;
+      }
+      WriteDbuEeprom();
+      DisplayTmp(DbuTime,0); 
+    break;
+    case THRT://三杯时间
+      if((ThrTime<120)&&(Cal==1))
+      {
+   	   ThrTime++;
+      }
+      else if((ThrTime>0)&&(Cal==2))
+      {
+      	   ThrTime--;
+      }
+      WriteThrEeprom();
+      DisplayTmp(ThrTime,0);   	
+    break;
+    case FORT://四杯时间
+      if((FouTime<120)&&(Cal==1))
+      {
+   	   FouTime++;
+      }
+      else if((FouTime>0)&&(Cal==2))
+      {
+      	   FouTime--;
+      }
+      WriteFourEeprom();
+      DisplayTmp(FouTime,0);   	  	
+    break;
+    case EXITS:
+      if((ExitShui<1)&&(Cal==1))
+      {
+   	   ExitShui++;
+      }
+      else if((ExitShui>0)&&(Cal==2))
+      {
+      	   ExitShui--;
+      }
+      WriteExitEeprom();
+      DisplayTmp(ExitShui,4); 
+    break;
+    default:
+    break;	
+    
+  }
+}
+
+
+void ButAdjPro(unsigned char Type)
+{
+    static unsigned char AddDelay=0;
+    static unsigned char SubDelay=0;
+    static unsigned char AddBFlag=0;
+    static unsigned char SubBFlag=0;
+        SW_ADD=1;
+   	if((SW_ADD==0x00)&&(AddBFlag==0xAA))
+   	{
+   	   AddDelay++;
+   	   if(AddDelay>SW_L)
+   	   {
+   	   	AddDelay=0;
+   	   	CtrBuz(0x01);
+   	   	AddBFlag=0x00;
+   	   	ButAdjPTo(Type,0x01);//表示当前参数增加
+   	   }
+   	}
+   	else
+   	{
+   	  AddBFlag=0xAA;	
+   	}
+   	SW_SUB=1;
+   	if((SW_SUB==0x00)&&(SubBFlag==0xAA))
+   	{
+   	   SubDelay++;
+   	   if(SubDelay>SW_L)
+   	   {
+   	   	ButAdjPTo(Type,0x02);//表示当前参数减少
+   	   	CtrBuz(0x01);
+   	   	SubDelay=0;
+   	   	SubBFlag=0x00;
+   	   }
+   	}
+   	else
+   	{
+   	  SubBFlag=0xAA;	
+   	}
+}
+void SetButGo(unsigned char Type)
+{
+  switch(Type)
+  {
+    case JINPAOT://浸泡时间
+      DisplayTmp(YuPaoT,1);
+      disLp=0x0F;
+      swWorkState=WORK_STATE_SET_P;
+    break;
+    case CAFET://咖啡温度
+       DisplayTmp(SetTemp,3);
+       swWorkState=WORK_STATE_SET_C;
+    break;
+    case ZHENQI://蒸汽温度
+       DisplayTmp(ZetTmp,0);
+       swWorkState=WORK_STATE_SET_T;
+    break;
+    case SLEEPT://休眠时间
+       DisplayTmp(SleepT,2);
+       swWorkState=WORK_STATE_SET_S;
+    break;
+    case EXITS:
+        DisplayTmp(ExitShui,4); 
+       swWorkState=WORK_STATE_SET_E;
+    break;
+    default:
+      break;
+  }			
+}
+
+void CheckSetBut(unsigned char Type)
+{
+	static unsigned char ButUp=0;
+	static unsigned char ButSw=0;
+    	SW_SET=1;
+   	if(SW_SET==0x00)
+   	{
+   	  ButSw++;
+   	  if((ButSw>SW_D)&&(ButUp==0))//表示弹起再次按下
+   	  {
+   	    ButUp=0xAA;
+   	    CtrBuz(0x01);
+   	    SetButGo(Type);
+   	  }	
+   	}
+   	else
+   	{
+   	   ButUp=0x00;
+   	   ButSw=0;	
+   	}	
+}
+void CheckSetRet(void)//检测设置按键
+{
+	static unsigned char SetButUp=0;
+	static unsigned char ButSw=0;
+	SW_SET=1;
+   	if((SW_SET==0x00)&&(SetButUp==0xAA))
+   	{
+   	  ButSw++;
+   	  if(ButSw>SW_D)//表示弹起再次按下
+   	  { 
+   	    swWorkState=WORK_STATE_RUN;	
+   	     CtrBuz(0x01);
+   	    SetButUp=0x00;
+		ButSw=0;
+   	  }	
+   	}
+   	else
+   	{
+   	  SetButUp=0xAA;
+   	  ButSw=0;	
+   	}
+}
+
+void CheckSleepTime(void)
+{
+ if(SleepT!=5)
+ {
+   SleepMinC=SleepMinC+1;
+   if(((SleepT==1)&&(SleepMinC>=EC1_SLEEP))||(((SleepT==2)&&(SleepMinC>=EC2_SLEEP)))||(((SleepT==3)&&(SleepMinC>=EC3_SLEEP)))||(((SleepT==4)&&(SleepMinC>=EC4_SLEEP))))
+   {
+     PowerSleep();
+	 disLp=0x00;
+	 SleepMinC=0;
+     swWorkState=WORK_STATE_SLEEP;
+      DisplayTmp(0,2);//休眠模式
+   }	
+ }		
+}
+
+void ProWorkState(void)
+{ 
+   switch(swWorkState)
+   {
+   	case WORK_STATE_INIT://开机自检NTC1 NTC2 开路或者短路
+   	disone=0x00;
+   	distwo=0x0F;
+   	disthr=0x0F;
+   	disLp=0x00;
+
+	if(GetZhenQiTmp()==0x01)
+	{
+	}
+    	if(CheckErrSen()==1)
+	{
+	   break;
+	}
+	swWorkState=WORK_STATE_DOWN;
+	TimeCc=0;
+   	break;
+   	case WORK_STATE_SLEEP://休眠模式
+        if(TimeCc>(0.5*ONES))
+   	{
+   	   TimeCc=0;
+   	   GetHandCoffeKey();
+   	   if((CaffeFlag==0)||(SW_SET==0)||(SW_ADD==0)||(SW_SUB==0))
+   	   {
+   	       MkCafeTime++;
+   	       if(MkCafeTime>3)
+   	       {
+  	        swWorkState=WORK_STATE_RUN;
+  	       }
+  	   }		
+   	}
+   	break;
+   	case WORK_STATE_BENG:
+   	if(TimeCc>(8*ONES))
+   	{
+   	   CtrBeng(0x00,0x00);//开水泵
+   	   CtrJinShuiF(0x00);
+  	   TimeCc=0;
+  	   swWorkState=WORK_STATE_RUN;	
+   	}
+	CheckShuiXiang();
+   	break;
+   	case WORK_STATE_RUN://正确运行 显示温度或者休眠
+	if(TimeCc>(0.5*ONES))
+	{
+	  TimeCc=0;
+   	  DisplauCTmp(ZhenTemp);
+   	  GetHandCoffeKey();
+	  CheckSleepTime();
+	}
+   	CheckSetBut(JINPAOT);//检查是否进入设置
+   	KarMak();//咖啡制作
+   	break;
+   	case WORK_STATE_WAIT://轮流开启阀
+   	  CtrBeng(0x01,0);//开启水泵 全部开启	
+	  CtrK2(0x01);//开启咖啡电磁阀
+	  CtrJinShuiF(0x01);
+	  swWorkState=WORK_STATE_PER;
+	  CheckEixtDo();
+	  MakTim=0;
+	  TimeCc=0;
+	  DisplayTmp(0,0);
+   	break;
+   	case WORK_STATE_PER:
+   	 if(TimeCc>(1*ONES))
+   	 {
+   	      CtrBeng(0,0);//关启水泵
+	      CtrK2(0x00);//关启咖啡电磁阀
+	      CtrJinShuiF(0x00);
+	      swWorkState= WORK_STATE_PAO;
+	      TimeCc=0;	
+   	 }
+   	 DisplayTmp(MakTim/ONES,0);	
+   	 CheckEixtDo();
+   	break;
+   	case WORK_STATE_PAO:
+   	if(TimeCc>(YuPaoT*ONES))//浸泡时间
+   	{
+   	     CtrBeng(0x01,0);//开启水泵
+	     CtrK2(0x01);//开启咖啡电磁阀
+	     CtrJinShuiF(0x01);
+	     swWorkState= WORK_STATE_OUT;
+	     if(HandFlag==0xAA)
+	     {
+	     	MkCafeTime=120*ONES;
+	     }
+	     else if(SigFlag==0xAA)
+	     {
+	     	MkCafeTime=SingTime*ONES;
+	     }
+	     else if(DubFlag==0xAA)
+	     {
+	     	MkCafeTime=DbuTime*ONES;
+	     }
+	     else if(ThrFlag==0xAA)
+	     {
+	     	MkCafeTime=ThrTime*ONES;
+	     }
+	     else if(FouFlag==0xAA)
+	     {
+	     	MkCafeTime=FouTime*ONES;
+	     }
+	     TimeCc=0;		
+   	 }
+    	DisplayTmp(MakTim/ONES,0);
+   	CheckEixtDo();
+   	break;
+   	case WORK_STATE_OUT://出咖啡
+   	if(TimeCc>MkCafeTime)
+   	{
+             CtrBeng(0x00,0x00);//关闭水泵
+	     CtrK2(0x00);//开启咖啡电磁阀
+	     CtrJinShuiF(0x00);
+	     HandFlag=0x00;
+	     SigFlag=0x00;
+	     DubFlag=0x00;
+	     ThrFlag=0x00;
+	     FouFlag=0x00;
+	     TimeCc=0;
+	     swWorkState= WORK_STATE_RUN;
+   	}
+       DisplayTmp(MakTim/ONES,0);
+   	CheckEixtDo();
+   	break;
+   	case WORK_STATE_EXIT://外部水箱补水
+   	
+   	break;
+   	case WORK_STATE_SET_P://设置浸泡时间0-30
+		SetModeLEDCtr(YuPaoT,1);//动态显示
+   		ButAdjPro(JINPAOT);//参数值调整 加或者减
+   		CheckSetBut(ZHENQI);//检查蒸汽设置
+   	break;
+   	case WORK_STATE_SET_C://设置咖啡温度
+   	       
+   	break;
+   	case WORK_STATE_SET_T:
+   		SetModeLEDCtr(ZetTmp,0);//动态显示
+   	        ButAdjPro(ZHENQI);//参数值调整 加或者减
+   		CheckSetBut(SLEEPT);//检查是否进入休眠模式
+   	break;
+   	case WORK_STATE_SET_S:
+   	        SetModeLEDCtr(SleepT,2);//动态显示
+   	        ButAdjPro(SLEEPT);//参数值调整 加或者减
+   		CheckSetRet();//检测是否退出
+   	break;
+   	case WORK_STATE_SET_E:
+   	        SetModeLEDCtr(ExitShui,4);//动态显示
+   	        ButAdjPro(EXITS);//参数值调整 加或者减
+   	        CheckSetRet();//检测是否退出
+   	        CheckCupButSet();//检查是否有杯数按键模式设置
+   	break;
+   	case WORK_STATE_SINT://设置单杯时间
+   	        SetModeLEDCtr(SingTime,0);//动态显示
+   	        ButAdjPro(SINGT);//参数值调整 加或者减
+   	        CheckSetRet();//检测是否退出
+   	        CheckCupButSet();//检查是否有杯数按键模式设置
+   	break;
+   	case WORK_STATE_DUBT://设置双杯时间
+   	        SetModeLEDCtr(DbuTime,0);//动态显示
+   	        ButAdjPro(DUBT);//参数值调整 加或者减
+   	        CheckSetRet();//检测是否退出
+   	        CheckCupButSet();//检查是否有杯数按键模式设置
+   	break;
+   	case WORK_STATE_THRT://设置3杯时间
+   	        SetModeLEDCtr(ThrTime,0);//动态显示
+   	        ButAdjPro(THRT);//参数值调整 加或者减
+   	        CheckSetRet();//检测是否退出
+   	        CheckCupButSet();//检查是否有杯数按键模式设置
+   	break;
+   	case WORK_STATE_FOUT:
+   	        SetModeLEDCtr(FouTime,0);//动态显示
+   	        ButAdjPro(FORT);//参数值调整 加或者减
+   	        CheckSetRet();//检测是否退出
+   	        CheckCupButSet();//检查是否有杯数按键模式设置
+   	break;
+   	case WORK_STATE_DOWN://电源关闭状态 显示EC0
+   	  disone=0x0E;
+   	  distwo=0x0E;
+   	  disthr=0x0E;
+	  disLp=0x00;
+   	break;
+   	case WORK_STATE_ERR://系统错误
+   	  disone=0x0E;//
+   	  distwo=0x0F;
+   	  disthr=ErrCode;
+	  if(ErrCode==3)
+   	  {
+   		if(GetShuiXiang()==0x01)
+        	{
+       		 if(ShuiXiangFlag==1)//表示水箱
+       		 {
+       		   ErrCode=0;
+       		   HandFlag=0x00;
+	     	   DubFlag=0x00;
+	     	   SigFlag=0x00;
+	     	   ThrFlag=0x00;
+			   FouFlag=0x00;
+	     	   MSFlag=0;	
+       		   swWorkState=WORK_STATE_RUN; 	
+       		 }
+       		}
+            } 
+            CheckPowerOff();
+   	break;
+   	default:
+        break;
+   }
+}
+void UpdateLED(unsigned char disDat)
+{
+  if((disDat&0x01)>0)
+  {
+  	LED_A=1;
+  }
+  else
+  {
+  	LED_A=0;
+  }
+  if((disDat&0x02)>0)
+  {
+  	LED_B=1;
+  }
+  else
+  {
+  	LED_B=0;
+  }	
+  if((disDat&0x04)>0)
+  {
+  	LED_C=1;
+  }
+  else
+  {
+  	LED_C=0;
+  }
+  if((disDat&0x08)>0)
+  {
+  	LED_D=1;
+  }
+  else
+  {
+  	LED_D=0;
+  }
+  if((disDat&0x10)>0)
+  {
+  	LED_E=1;
+  }
+  else
+  {
+  	LED_E=0;
+  }
+  if((disDat&0x20)>0)
+  {
+  	LED_F=1;
+  }
+  else
+  {
+  	LED_F=0;
+  }
+  if((disDat&0x40)>0)
+  {
+  	LED_G=1;
+  }
+  else
+  {
+  	LED_G=0;
+  }						
+}
+//显示位置                          0   1    2    3    4    5    6    7    8    9    P    E    C    -    0x0E 0x0F
+unsigned char xdata distable[16]={0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f,0x73,0x79,0x39,0x40,0x00,0x71};
+void FlashLed(void)
+{
+   unsigned char dat1;
+   TimeCc++;
+   AutCtrTime++;
+   MakTim++;
+  LED_COM1=1;
+  LED_COM2=1;
+  LED_COM3=1;
+  LED_COM4=1;
+   dispos++;
+   switch(dispos)
+   {
+   	case 1://表示刷新第一位
+   	  dat1=distable[disone];
+   	  UpdateLED(dat1);
+  	  LED_COM1=0;
+  	  LED_COM2=1;
+      LED_COM3=1;
+	  LED_COM4=1;
+   	break;
+   	case 2://表示刷新第二位
+   	  dat1=distable[distwo];
+   	  UpdateLED(dat1);
+	  LED_COM1=1;
+  	  LED_COM2=0;
+      LED_COM3=1;
+	  LED_COM4=1;
+   	break;
+   	case 3://表示刷新第三位
+   	  dat1=distable[disthr];
+   	  UpdateLED(dat1);
+	  LED_COM1=1;
+  	  LED_COM2=1;
+      LED_COM3=0;
+	  LED_COM4=1;
+   	break;
+    case 4:
+          LED_B=0;
+          LED_F=0;
+	  LED_A=0;
+	  LED_E=0;
+	  if((disLp&0x01)>0)
+	  {
+	  	LED_E=1;
+	  }
+	  if((disLp&0x02)>0)
+	  {
+	  	LED_A=1;
+	  }
+	  if((disLp&0x04)>0)
+	  {
+	  	LED_F=1;
+	  }
+	  if((disLp&0x08)>0)
+	  {
+	  	LED_B=1;
+	  }
+	  LED_COM1=1;
+  	  LED_COM2=1;
+      LED_COM3=1;
+	  LED_COM4=0;
+	break;
+	 default:
+   	break;		
+   }
+    if(dispos>=4)
+	dispos=0;		
+}
+
+unsigned char  CheckErrSen(void)
+{
+	  if((ZhenTemp<1)||(ZhenTemp>200))
+	  {
+	  	ErrCode=2;//表示NTC1故障
+	  	PowerSleep();
+	    swWorkState=WORK_STATE_ERR;	
+		return 1;
+	  }
+	  return 0;
+}
+
+
+
+#define ZHEQITMP  125
+#define OFFSET_TMP  6
+
+#define BENGTIMEMAX   2*60*2  //泵水超过2分钟  5表示1秒 每个计数0.2秒
+#define BENGTT    10   //检测水位控针 还要泵时间
+
+void TemControlAuto(void)
+{
+//	static unsigned int xdata ZhenTimeP=0;
+	static unsigned int BengSTime=0;
+	static unsigned int BengMaxTime=0;
+//***************************************************************
+       AutCtrTime++;
+       if(AutCtrTime>(0.5*ONES))
+       {
+	    AutCtrTime=0;
+//*******************************************************************
+	  if(CheckErrSen()==1)
+	  return;
+         if(HandFlag==0x00)
+         {
+	  if(CheckShuiXiang()==1)
+    	  return;
+    	 } 
+//**************************************************************	
+	if(GetZhenQiTmp()==0x01)
+	 {
+	   if(ZhenTemp<ZetTmp)
+	   {
+	  		CtrZhenQI(0x01,0);
+	   }
+	  else
+	  {
+	 		 CtrZhenQI(0x00,0x00);
+	  }
+     }
+//***************************************************************
+	if(GetShuiWei()==0x01)
+	  {
+	  	if((ShuiInFlag==0)&&(BoShuiFlag==0))//表示没有水
+	  	{
+	  	 if((MSFlag!=0xAA)&&(PowerState==0xAA))//表示当前没有做咖啡
+	  	  {
+	  	     CtrK1(0x01);
+	  	     CtrBeng(0x01,0x00);
+		     BoShuiFlag=0xAA;
+		     BengSTime=0;
+		     BengMaxTime=0;
+		   }
+	   	}
+		else if((ShuiInFlag==1)&&(BoShuiFlag==0xAA))//表示正在泵水
+	        {
+	           BengSTime++;
+	          if(BengSTime>BENGTT)
+	          {
+	             CtrK1(0x00);
+	             if(MSFlag!=0xAA)
+	             {
+	  	        	CtrBeng(0x00,0x00);
+	  	     	}
+	  	     	BengSTime=0;
+				BoShuiFlag=0x00;
+	  	   		}
+	    	 }
+	    	 else if((ShuiInFlag==0)&&(BoShuiFlag==0xAA))
+	    	 {
+	    	   BengMaxTime++;
+	    	   if(BengMaxTime>BENGTIMEMAX)//表示泵水一起没有成功
+	    	   {
+	    	       ErrCode=5;//表示泵水时间超过	
+	    	       PowerSleep();
+	    	       FengMinFlag=0;
+	    	       swWorkState=WORK_STATE_ERR;
+	    	   }		
+	    	 }	 	
+	 }
+//***************************************************************
+	 
+	}
+}
+
+
+void ConfineSleepTime(void)
+{
+ 
+}
+
+
+
+
+void main(void)
+{ 
+
+  //  ((void(code*)(unsigned char))0x2002)(0x00);      //Select IIC interface for P2.5 & P2.6
+   // ((void(code*)(void))0x2005)();                   //Touch initial
+        LVC=0x00;	
+       	g_SleepCtrl=0;
+		GPIO_Init();
+		init_UART0();
+		ADC_Init();
+		TIMER0_initialize();
+		//TR1  = 1;											//开启定时器1
+		EA   = 1;
+		ReadPaoEeprom();
+		ReadTmpEeprom();
+		ReadSleepEeprom();
+		ReadExitEeprom();							
+		ReadSingEeprom();
+		ReadDbuEeprom();
+		ReadThrEeprom();
+		ReadFourEeprom();
+    	while(1)
+    	{
+        		//((unsigned char(code*)(unsigned char))0x2008)(0x28);  //Touch Normal Run												//00011100
+	 		    	ProWorkState();	
+	 		    	if(swWorkState>WORK_STATE_ERR)
+	 		    	{
+	 		    	   TemControlAuto();
+	 		    	 }
+	 		    	CheckPowerKey();
+			  		Delay(10);
+   	 }
+}  	

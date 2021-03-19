@@ -1,0 +1,51 @@
+C51 COMPILER V9.54   WDT                                                                   03/18/2021 19:09:41 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE WDT
+OBJECT MODULE PLACED IN .\Objects\WDT.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE WDT.c OPTIMIZE(1,SIZE) BROWSE INCDIR(..\3126) DEBUG OBJECTEXTEND PRINT(.\Li
+                    -stings\WDT.lst) OBJECT(.\Objects\WDT.obj)
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "WDT.h"
+   3          
+   4          #define d_WDTRE  1                    //WDT Enable Bit
+   5          #define d_WDTRM  0x07                 //WDTM[3:0] WDT Clock Source Divider Bit (0~F)
+   6          
+   7          void WDTR_Init(void)                  //Initialize WDT
+   8          {
+   9   1          TAKEY = 0x55;                     //**************************************//
+  10   1          TAKEY = 0xAA;                     //Set To Enable The WDTC Write Attribute//
+  11   1          TAKEY = 0x5A;                     //**************************************//
+  12   1          WDTRC = (d_WDTRM) | (d_WDTRE<<5); //Set WDT Reset Time and Enable WDT and select RST/Interrupt
+  13   1      }
+  14          
+  15          void WDTR_CountClear(void)
+  16          {
+  17   1          WDTK = 0x55;                //WDT Timer Clear To Zero
+  18   1      }
+  19          
+  20          void WDTR_Disable(void)
+  21          {
+  22   1          TAKEY = 0x55;               //**************************************//
+  23   1          TAKEY = 0xAA;               //Set To Enable The WDTC Write Attribute//
+  24   1          TAKEY = 0x5A;               //**************************************//
+  25   1          WDTRC = 0x00;               //Disable WDT Function
+  26   1      }
+  27          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =     30    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
