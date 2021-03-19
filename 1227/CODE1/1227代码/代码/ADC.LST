@@ -1,0 +1,139 @@
+C51 COMPILER V9.54   ADC                                                                   01/27/2021 14:40:18 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE ADC
+OBJECT MODULE PLACED IN ADC.OBJ
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE ADC.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "ADC.h"
+   3          
+   4          unsigned int n_data    = 0x0000;
+   5          bit          ADCfinish = 0;
+   6          
+   7          
+   8          void ADC_Start(unsigned char n_ADC_CH)
+   9          {
+  10   1          ADCC2  = n_ADC_CH; //Set a new channel
+  11   1          ADCC2 |= 0x80;      //ADC start conversion
+  12   1      }
+  13          
+  14          void ADC_Init(void)
+  15          {
+  16   1          ADCC1 = d_ADCnEN0;                 //Set ADC channel
+  17   1          ADCCS = d_ADCnEN1 | d_ADC_CLK_Sel; //Set ADC channel & Select ADC clock
+  18   1          IEADC = 1;                         //Enable ADC interrupt.
+  19   1          EA    = 1;
+  20   1      }
+  21          
+  22          unsigned int ADC_Read12() //12-bit ADC
+  23          {
+  24   1          unsigned int n_ADCD12 = 0x0000;
+  25   1          n_ADCD12 = (ADCDH<<4) | ADCDL;     //12-bit ADC
+  26   1          return n_ADCD12;
+  27   1      }
+  28          
+  29          void ADCInterrupt(void) interrupt d_ADC_Vector // ADC Interrupt Vector Address 0053h => interrupt 10
+  30          {
+  31   1          n_data = ADC_Read12(); //Read ADC
+  32   1          ADCfinish = 1;
+  33   1      }
+  34          unsigned int ADC_Val[10];//´¢´¢AD×ª»»
+  35          void ADC(unsigned char channel)
+  36          {
+  37   1          if(channel==0)
+  38   1          {
+  39   2              if (d_ADCnEN0 & 0x01)
+  40   2              {
+  41   3                  ADC_Start(d_ADC_CH0_IN);
+  42   3                  while(!ADCfinish);
+  43   3                  ADCfinish = 0;
+  44   3              }
+  45   2          }
+  46   1          else
+  47   1          {
+  48   2              if (d_ADCnEN0 & 0x08)
+  49   2              {
+  50   3                  ADC_Start(d_ADC_CH3_IN);
+  51   3                  while(!ADCfinish);
+  52   3                  ADCfinish = 0;
+  53   3              }
+  54   2          }
+  55   1      }
+C51 COMPILER V9.54   ADC                                                                   01/27/2021 14:40:18 PAGE 2   
+
+  56          unsigned int GetADCCalVal(unsigned char channel)
+  57          {
+  58   1          unsigned int xdata AdPerVal=0;
+  59   1          unsigned char xdata i=0;
+  60   1          AdPerVal=0;
+  61   1          for(i=0; i<10; i++)
+  62   1          {
+  63   2              ADC(channel);
+  64   2              ADC_Val[i]=n_data;
+  65   2              AdPerVal=AdPerVal+ADC_Val[i];
+  66   2          }
+  67   1          return AdPerVal/10;
+  68   1      }
+  69          #define SHUI_REF  2000
+  70          #define MIN_REF   50
+  71          unsigned char CheckShuiState(void)
+  72          {
+  73   1          unsigned int xdata ADValc=0;
+  74   1          ADValc=GetADCCalVal(d_ADC_CH3_IN);
+  75   1          if(ADValc<SHUI_REF)
+  76   1          {
+  77   2              if(ADValc>MIN_REF)
+  78   2              {
+  79   3                  return 0;
+  80   3              }
+  81   2              else
+  82   2              {
+  83   3                  //return 2;
+  84   3                  return 0;
+  85   3              }
+  86   2          }
+  87   1          else
+  88   1          {
+  89   2              return 1;
+  90   2          }
+  91   1      }
+  92          unsigned char CheckShuiStateB(void)
+  93          {
+  94   1          unsigned int xdata ADValc=0;
+  95   1          ADValc=GetADCCalVal(d_ADC_CH0_IN);
+  96   1          if(ADValc<SHUI_REF)
+  97   1          {
+  98   2              if(ADValc>MIN_REF)
+  99   2              {
+ 100   3                  return 0;
+ 101   3              }
+ 102   2              else
+ 103   2              {
+ 104   3                  //return 2;
+ 105   3                  return 0;
+ 106   3              }
+ 107   2          }
+ 108   1          else
+ 109   1          {
+ 110   2              return 1;
+ 111   2          }
+ 112   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    270    ----
+   CONSTANT SIZE    =   ----    ----
+C51 COMPILER V9.54   ADC                                                                   01/27/2021 14:40:18 PAGE 3   
+
+   XDATA SIZE       =   ----       7
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     22    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      1    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

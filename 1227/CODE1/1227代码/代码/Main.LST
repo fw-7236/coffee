@@ -1,0 +1,1980 @@
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN Main.OBJ
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE Main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "OB38R08T1.h"
+   2          #include "EEPROM.h"
+   3          #include "Timer.h"
+   4          #include "wdt.h"
+   5          #define  ONES          445///Ñ­»·Ê±¼äÎª1Ãë 440
+   6          //*******************************************************************
+   7          
+   8          typedef enum _WORKState
+   9          {
+  10              OPT_STATE_INIT     =     0,//0x00 ±íÊ¾»úÆ÷³õÊ¼»¯×´Ì¬ È«²¿ÊýÂë¹ÜÏÔÊ¾888 1Ãë
+  11              OPT_STATE_PREH     =     1,//0x01 ±íÊ¾´ø»úÔ¤ÈÈ½×¶Î ¼ì²âË®Î» ³¬¹ý·¶Î§ÖµÏÔÊ¾NG ÏÔÊ¾0x000 ½øÈë´íÎó×´Ì¬ 0x
+             -09
+  12              OPT_STATE_IDLE     =     2,//µÈ´ýÓÃ»§²Ù×÷×´Ì¬
+  13              OPT_STATE_HEAD1    =     3,//±íÊ¾¼ÓÈÈ×´Ì¬1
+  14              OPT_STATE_HEAD2    =     4,//±íÊ¾¼ÓÈÈ×´Ì¬2
+  15              OPT_STATE_CLERA    =     5,//±íÊ¾Çå½à×´Ì¬
+  16              OPT_STATE_CLERB    =     6,//±íÊ¾Çå¿ÕìÒÌå
+  17              OPT_STATE_SHEAD1   =     7,//±íÊ¾ÎÂ¶ÈÉèÖÃ1
+  18              OPT_STATE_SHEAD2   =     8,//±íÊ¾ÎÂ¶ÈÉèÖÃ2
+  19              OPT_STATE_ERR1     =     9,//²¹Ë®×´Ì¬
+  20              OPT_STATE_ERR2     =    10,//²¹Ë®³¬¹ý2·ÖÖÓ
+  21          } WorkState;
+  22          
+  23          WorkState  swWorkState=OPT_STATE_INIT;//¶¨Òå×´Ì¬»ú
+  24          WorkState  swWorkStateB=OPT_STATE_INIT;//¶¨Òå×´Ì¬»ú
+  25          
+  26          bit  HeatFlag;//¼ÓÈÈ±ê¼ÇÖµ
+  27          bit  TempFlag;//ÎÂ¶È×´Ì¬
+  28          
+  29          bit  HeatFlagB;//¼ÓÈÈ±ê¼ÇÖµ
+  30          bit  TempFlagB;//ÎÂ¶È×´Ì¬
+  31          
+  32          unsigned char xdata SenTemp=0;
+  33          unsigned int xdata  ShuiTime=0;//²¹Ë®Ê±¼ä¼ÆÊý
+  34          
+  35          unsigned char xdata SenTempB=0;
+  36          unsigned int xdata  ShuiTimeB=0;//²¹Ë®Ê±¼ä¼ÆÊý
+  37          
+  38          unsigned int xdata MkCafeTime=0;
+  39          unsigned int xdata MkCafeTimeB=0;
+  40          unsigned int xdata ZhenTime=0;
+  41          unsigned int xdata ZhenTimeB=0;
+  42          unsigned char xdata PowerState=0;
+  43          unsigned char xdata PowerStateB=0;
+  44          unsigned char xdata LedOnOFF=0;
+  45          unsigned char xdata LedOnOFFB=0;
+  46          
+  47          #define FA_RA   100
+  48          
+  49          #define TAR_CAFE    95
+  50          #define TAR_ZHEN    110
+  51          
+  52          unsigned int AutCtrTime=0;
+  53          unsigned int AutCtrTimeB=0;
+  54          unsigned int TimeCc=0;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 2   
+
+  55          unsigned int TimeCcB=0;
+  56          
+  57          unsigned char Lamp=0;
+  58          unsigned char LampB=0;
+  59          unsigned char Temp1=40;//¼ÇÂ¼T1ÎÂ¶ÈÖµ
+  60          unsigned char Temp2=60;//¼ÇÂ¼T2ÎÂ¶ÈÖµ
+  61          
+  62          unsigned char Temp1B=40;//¼ÇÂ¼T1ÎÂ¶ÈÖµ
+  63          unsigned char Temp2B=60;//¼ÇÂ¼T2ÎÂ¶ÈÖµ
+  64          
+  65          unsigned char HeadMaxTmp=0;
+  66          unsigned char HeadMaxTmpB=0;
+  67          
+  68          unsigned char ShuiFlag=0;
+  69          unsigned char ShuiFlagB=0;
+  70          unsigned int KeyTime=0;
+  71          unsigned int KeyTimeB=0;
+  72          
+  73          unsigned char KeyFlag=0;
+  74          unsigned char KeyFlagB=0;
+  75          unsigned char KeyBut=0;
+  76          unsigned char KeyButB=0;
+  77          unsigned char HeatFa=0;//
+  78          unsigned char HeatFaB=0;//
+  79          unsigned char ErrCode=0;
+  80          unsigned char ErrCodeB=0;
+  81          unsigned char StartMach=0xAA;
+  82          unsigned char StartMachB=0xAA;
+  83          unsigned int DelayTime=0;
+  84          unsigned int DelayTimeB=0;
+  85          
+  86          //´æ´¢
+  87          #define DFE_CAFE    25
+  88          #define DFE_HT1     5
+  89          #define DFE_HT2     5
+  90          
+  91          #define MAX_ZT      300  //ÕôÆûÊ±¼ä
+  92          #define MAX_HT1     30
+  93          #define MAX_HT2     30
+  94          #define MAX_CFE     60
+  95          #define MAX_POWER   900  //15·ÖÖÓ¹Ø»ú
+  96          
+  97          
+  98          #define TMP1_VAL    0  //
+  99          #define TMP2_VAL     1  //
+ 100          
+ 101          #define TMP1B_VAL    0  //
+ 102          #define TMP2B_VAL     1  //
+ 103          
+ 104          #define DAFETMP  60    //»Ö¸´µ½Ä¬ÈÏÎÂ¶È
+ 105          
+ 106          #define KeyLong   20
+ 107          #define KeyNor    0
+ 108          #define STMPMAX   90
+ 109          #define STMPMIN   40
+ 110          
+ 111          #define TMELOW    35
+ 112          
+ 113          unsigned char CheckShuiState(void);
+ 114          unsigned char CheckShuiStateB(void);
+ 115          void Display(unsigned char da1,unsigned char da2,unsigned char da3,unsigned char da4);
+ 116          void CheckPowerKey(void);
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 3   
+
+ 117          unsigned char GetMsKey(void);
+ 118          void BuzCtr(unsigned int BuzTime);
+ 119          void ADC_Init(void);
+ 120          
+ 121          #define  ADD_SW     0x06 //±íÊ¾¼Ó1°´¼ü
+ 122          #define  SUB_SW     0x01 //±íÊ¾¼õ1°´¼ü
+ 123          #define  CLEAR_SW   0x02 //±íÊ¾Çå½à°´¼ü
+ 124          #define  TMP1_SW    0x03 //±íÊ¾ÎÂ¶È1°´¼ü
+ 125          #define  TMP2_SW    0x04 //±íÊ¾ÎÂ¶È1°´¼ü
+ 126          #define  START_SW   0x05 //±íÊ¾Æô¶¯°´¼ü
+ 127          
+ 128          #define  START_LED  0x10
+ 129          //******************************************************************************
+ 130          void Delay(unsigned int tim)
+ 131          {
+ 132   1          unsigned int  i,j;
+ 133   1          for (i=0; i<tim; i++)
+ 134   1              for (j=0; j<100; j++);
+ 135   1      }
+ 136          
+ 137          //**********************************************************************
+ 138          #define  CT1_S         P1_7   //Ë®±Ãµç»ú¿ØÖÆ1 
+ 139          #define  CT1_Z         P1_6   //ÕôÆû·¢ÈÈ¿ØÖÆ»òÕß¼ÓÈÈ¿É¿Ø¹è¿ØÖÆ   PWM0
+ 140          #define  CT1_C         P3_1  //µç´Å·§¿ª¹Ø¿ØÖÆ
+ 141          
+ 142          #define  LEVE1         P0_7 //ADC7  Ë®Î»¿ØÕëÊäÈë
+ 143          #define  SCR1          P0_6 //¹ÌÌ¬¼ÌµçÆ÷¿ØÖÆ ±¸ÓÃ
+ 144          #define  P_SW          P0_5 //Ñ¹Á¦¿ª¹Ø
+ 145          
+ 146          #define  CS             P1_5 //MAX6675 IC A
+ 147          #define  SCK            P0_0
+ 148          #define  SDA            P0_1
+ 149          
+ 150          #define  SPI_STB        P1_2
+ 151          #define  SPI_CLK        P1_3
+ 152          #define  SPI_DA         P1_4
+ 153          //***************************************************************************
+ 154          #define  CT2_S          P1_0   //Ë®±Ãµç»ú¿ØÖÆ   
+ 155          #define  CT2_Z          P1_1   //ÕôÆû·¢ÈÈ¿ØÖÆ»òÕß¼ÓÈÈ¿É¿Ø¹è¿ØÖÆ  
+ 156          #define  CT2_C          P3_0  //µç´Å·§¿ª¹Ø¿ØÖÆ
+ 157          
+ 158          #define  LEVE2          P0_4 //ADC0  Ë®Î»¿ØÕëÊäÈë
+ 159          #define  SCR2           P0_3 //¹ÌÌ¬¼ÌµçÆ÷¿ØÖÆ ±¸ÓÃ
+ 160          #define  P_SW2          P0_2 //Ñ¹Á¦¿ª¹Ø
+ 161          
+ 162          #define  CS2             P2_3//MAX6675 TWO
+ 163          
+ 164          #define  SPI_STB2        P3_5
+ 165          #define  SPI_CLK2        P3_4
+ 166          #define  SPI_DA2         P3_3
+ 167          //**********************************************************************
+ 168          //*******************************************************************
+ 169          // 00 ±íÊ¾Ë«ÏòIO
+ 170          // 01 ±íÊ¾ÍÆÍìÊä³ö
+ 171          // 10 ±íÊ¾¸ß×èÊäÈë
+ 172          // 11 ±íÊ¾¿ªÂ©
+ 173          void GPIO_Init()
+ 174          {
+ 175   1          P0 = 0x00;
+ 176   1          P1 = 0x00;
+ 177   1          P2 = 0x00;
+ 178   1          P3 = 0x00;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 4   
+
+ 179   1      //P0.0-->SCK  MAX6675 IIC
+ 180   1      //P0.1-->SDA  MAX6675 IIC
+ 181   1      //P0.2-->P_SW2  Ñ¹Á¦¿ª¹Ø2
+ 182   1      //P0.3-->SCR2   ±¸ÓÃ
+ 183   1      //P0.4-->LEVE2  Ë®Á¿¼ì²â2
+ 184   1      //P0.5-->P_SW   Ñ¹Á¦¿ª¹Ø
+ 185   1      //P0.6-->SCR1   ¹ÌÌ¬¼ÌµçÆ÷
+ 186   1      //P0.7-->LEVE1  Ë®Î»¼ì²âÊäÈë
+ 187   1      //      7  6  5  4  3  2  1  0
+ 188   1      //P0M1  1  0  1  0      0  0  0  0
+ 189   1      //P0M0  0  0  0  0      0  0  0  1
+ 190   1          P0M1 = 0x90;
+ 191   1          P0M0 = 0x01;
+ 192   1      //      7  6  5  4  3  2  1  0
+ 193   1      //P1M1  0  0  1  1      0  1  1  0
+ 194   1      //P1M0  1  1  0  0      1  0  0  0
+ 195   1      //P1.0-->CT2_S  Ë®±Ãµç»ú¿ØÖÆ
+ 196   1      //P1.1-->CT2_Z  ÕôÆû·¢ÈÈ¿ØÖÆ»òÕß¼ÓÈÈ¿É¿Ø¹è¿ØÖÆ
+ 197   1      //P1.2-->SPI_STB
+ 198   1      //P1.3-->SPI_CLK
+ 199   1      //P1.4-->SPI_DA
+ 200   1      //P1.5-->CS       MAX6675Æ¬Ñ¡
+ 201   1      //P1.6-->CT1_Z    ¹ÌÌ¬¼ÌµçÆ÷
+ 202   1      //P1.7-->CT1_S    //Ë®±Ãµç»ú¿ØÖÆ1
+ 203   1          P1M1 = 0x00;
+ 204   1          P1M0 = 0xEF;
+ 205   1      //P2.3 Êä³ö P2.5 Êä³ö P2.6ÊäÈë
+ 206   1      //      7  6  5  4  3  2  1  0
+ 207   1      //P2M1  0  0  0  0      0  0  0  0
+ 208   1      //P2M0  0  0  0  0      1  0  0  0
+ 209   1      
+ 210   1      //      7  6  5  4  3  2  1  0
+ 211   1      //P3M1  0  0  0  0      0  0  0  0
+ 212   1      //P3M0  0  0  1  1      1  0  0  0
+ 213   1      //******************************************************
+ 214   1      //P2.3--->CS2
+ 215   1          P2M1 = 0x00;
+ 216   1          P2M0 = 0x08;
+ 217   1      //***********************************************************
+ 218   1      //P3.0--->CT2_C   µç´Å·§¿ª¹Ø¿ØÖÆ2
+ 219   1      //P3.1--->CT1_C   µç´Å·§¿ª¹Ø¿ØÖÆ1
+ 220   1      //P3.2--->AD1     ±¸ÓÃ
+ 221   1      //P3.3--->DIO2    //SPI TWO
+ 222   1      //P3.4--->CLK2    //SPI
+ 223   1      //P3.5--->STB2
+ 224   1          P3M1 = 0x00;
+ 225   1          P3M0 = 0xF7;
+ 226   1      //********************************************************
+ 227   1          CT1_S=0;
+ 228   1          CT1_Z=0; //PWM0
+ 229   1          CT1_C=0;
+ 230   1          P_SW=1;
+ 231   1      
+ 232   1          CT2_S=0;
+ 233   1          CT2_Z=0; //PWM0
+ 234   1          CT2_C=0;
+ 235   1          P_SW2=1;
+ 236   1      //********************************************************
+ 237   1      }
+ 238          void delayNP(unsigned int tim)
+ 239          {
+ 240   1          unsigned int  i,j;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 5   
+
+ 241   1          for (i=0; i<tim; i++)
+ 242   1          {
+ 243   2              for (j=0; j<10; j++);
+ 244   2          }
+ 245   1      }
+ 246          /**************************************************************/
+ 247          //¹¦ÄÜ£ºÏòTM1628·¢ËÍ8Î»Êý¾Ý
+ 248          /**************************************************************/
+ 249          void send_8bit(unsigned char dat)
+ 250          {
+ 251   1          unsigned char i;
+ 252   1          for(i=0; i<8; i++)
+ 253   1          {
+ 254   2              if(dat&0x01)
+ 255   2                  SPI_DA=1;
+ 256   2              else SPI_DA=0;
+ 257   2              SPI_CLK=0;
+ 258   2              Delay(6);
+ 259   2              SPI_CLK=1;
+ 260   2              Delay(6);
+ 261   2              dat=dat>>1;
+ 262   2          }
+ 263   1      }
+ 264          unsigned char read_8bit(void)//ÏÂ½µÑØÊä³ö
+ 265          {
+ 266   1          unsigned char xdata reData,i;
+ 267   1          SPI_DA=1;
+ 268   1          reData=0;
+ 269   1          for(i=0; i<8; i++)
+ 270   1          {
+ 271   2              SPI_CLK=0;
+ 272   2              Delay(6);
+ 273   2              SPI_CLK=1;
+ 274   2              Delay(6);
+ 275   2              reData=reData>>1;
+ 276   2              if(SPI_DA)
+ 277   2              {
+ 278   3                  reData=reData|0x80;
+ 279   3              }
+ 280   2          }
+ 281   1          return reData;
+ 282   1      }
+ 283          
+ 284          
+ 285          
+ 286          //********************************************************************************************************
+             -****************
+ 287          unsigned int MAX6675_ReadReg(unsigned char channel)
+ 288          {
+ 289   1          unsigned char i;
+ 290   1          unsigned int dat;
+ 291   1          i   = 0;
+ 292   1          dat = 0;
+ 293   1          SCK = 0;
+ 294   1          if(channel==1)
+ 295   1          {
+ 296   2              CS=0;
+ 297   2          }
+ 298   1          else
+ 299   1          {
+ 300   2              CS2=0;
+ 301   2          }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 6   
+
+ 302   1          Delay(20);
+ 303   1          for(i=0; i<16; i++)         //get D15-D0 from 6675
+ 304   1          {
+ 305   2              SCK = 1;
+ 306   2              delayNP(20);
+ 307   2              dat = dat<<1;
+ 308   2              if( SDA==1 )
+ 309   2                  dat = dat|0x01;
+ 310   2              SCK = 0;
+ 311   2              delayNP(20);
+ 312   2          }
+ 313   1          if(channel==1)
+ 314   1          {
+ 315   2              CS=1;
+ 316   2          }
+ 317   1          else
+ 318   1          {
+ 319   2              CS2=1;
+ 320   2          }
+ 321   1          return dat;
+ 322   1      }
+ 323          //********************************************************************************************************
+             -*************
+ 324          //¶¨ÒåÊý¾Ý                                                                          0x0A  0x0b            
+             -    0x0f 0x10
+ 325          //¶¨ÒåÊý¾Ý
+ 326          unsigned char const CODE[][2] =
+ 327          //   0           1         2            3          4            5                   6
+ 328          {   {0x3F,0x00},{0x06,0x00},{0x5b,0x00},{0x4f,0x10},{0x66,0x00},{0x6d,0x00},{0x7D,0x00},
+ 329          //   7           8               9                     E          L            o                ¿Õ 0x0D   0x0E
+ 330              {0x07,0x00},{0x7f,0x00},{0x6f,0x00},{0x79,0x00},{0x38,0x00},{0x5c,0x00},{0x00,0x00},{0xFF,0x00}
+ 331          }; //4Î»8¶ÎÄ£Ê½ÏÂ£¬¹²ÒõÊýÂë¹Ü0-9µÄ±àÂë
+ 332          
+ 333          
+ 334          /*****************·¢ËÍÖ¸Áî*************************************/
+ 335          void command(unsigned char com)
+ 336          {
+ 337   1          SPI_STB=1;
+ 338   1          Delay(6);
+ 339   1          SPI_STB=0;
+ 340   1          send_8bit(com);
+ 341   1      }
+ 342          //*******************************************************************************************************
+ 343          /**************************************************************/
+ 344          //¹¦ÄÜ£ºÔÚ1-4Î»ÊýÂë¹ÜÏÔÊ¾Êý×Ö0-3
+ 345          /**************************************************************/
+ 346          void Display(unsigned char da1,unsigned char da2,unsigned char da3,unsigned char da4)
+ 347          {
+ 348   1          static unsigned char xdata sda1=0;
+ 349   1          static unsigned char xdata sda2=0;
+ 350   1          static unsigned char xdata sda3=0;
+ 351   1          static unsigned char xdata sda4=0;
+ 352   1          if((sda1==da1)&&(sda2==da2)&&(sda3==da3)&&(sda4==da4))
+ 353   1              return;
+ 354   1          if(ErrCode==0x01)
+ 355   1          {
+ 356   2              da1=0x0D;
+ 357   2              da2=0x0A;
+ 358   2              da3=0x01;
+ 359   2              if(sda4==da4)
+ 360   2                  return;
+ 361   2          }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 7   
+
+ 362   1          command(0x01); //ÉèÖÃÏÔÊ¾Ä£Ê½£¬4Î»13¶ÎÄ£Ê½
+ 363   1          command(0x40); //ÉèÖÃÊý¾ÝÃüÁî,²ÉÓÃµØÖ·×Ô¶¯¼Ó1Ä£Ê½
+ 364   1          command(0xc0); //ÉèÖÃÏÔÊ¾µØÖ·£¬´Ó00H¿ªÊ¼
+ 365   1          send_8bit(CODE[da1][0]);
+ 366   1          send_8bit(CODE[da1][1]);
+ 367   1          send_8bit(CODE[da2][0]);
+ 368   1          send_8bit(CODE[da2][1]);
+ 369   1          send_8bit(CODE[da3][0]);
+ 370   1          send_8bit(CODE[da3][1]);
+ 371   1          send_8bit(0x00);
+ 372   1          send_8bit(0x00);
+ 373   1          send_8bit(da4);
+ 374   1          send_8bit(0x00);
+ 375   1          command(0x8E); //ÏÔÊ¾¿ØÖÆÃüÁî£¬´ò¿ªÏÔÊ¾²¢ÉèÖÃÎª×îÁÁ
+ 376   1          SPI_STB=1;
+ 377   1          sda1=da1;
+ 378   1          sda2=da2;
+ 379   1          sda3=da3;
+ 380   1          sda4=da4;
+ 381   1      }
+ 382          unsigned char CheckKey(void)//¶ÁÈ¡°´¼üÖµ
+ 383          {
+ 384   1          unsigned char xdata Key1,Key2,Key3,Key4,Key5;
+ 385   1          unsigned char KeyVal=0;
+ 386   1          command(0x42);//ÉèÖÃ¶ÁÈ¡°´¼üÖ¸Áî
+ 387   1          Key1=read_8bit(); //
+ 388   1          Key2=read_8bit();
+ 389   1          Key3=read_8bit();//SW2A
+ 390   1          Key4=read_8bit();//SW1A
+ 391   1          Key5=read_8bit();//SW1B  SW2B
+ 392   1          KeyVal=0x00;
+ 393   1          if((Key1&0x01)>0)//±íÊ¾°´¼ü1
+ 394   1          {
+ 395   2              KeyVal=0x01;
+ 396   2          }
+ 397   1          else if((Key1&0x08)>0)//±íÊ¾°´¼ü2
+ 398   1          {
+ 399   2              KeyVal=0x02;
+ 400   2          }
+ 401   1          else if((Key2&0x01)>0)//±íÊ¾°´¼ü1
+ 402   1          {
+ 403   2              KeyVal=0x03;
+ 404   2          }
+ 405   1          else if((Key2&0x08)>0)//±íÊ¾°´¼ü2
+ 406   1          {
+ 407   2              KeyVal=0x04;
+ 408   2          }
+ 409   1          else if((Key3&0x01)>0)//±íÊ¾°´¼ü1
+ 410   1          {
+ 411   2              KeyVal=0x05;
+ 412   2          }
+ 413   1          else if((Key3&0x08)>0)//±íÊ¾°´¼ü2
+ 414   1          {
+ 415   2              KeyVal=0x06;
+ 416   2          }
+ 417   1          return KeyVal;
+ 418   1      }
+ 419          /*****************·¢ËÍÖ¸Áî*************************************/
+ 420          void send_8bitB(unsigned char dat)
+ 421          {
+ 422   1          unsigned char i;
+ 423   1          for(i=0; i<8; i++)
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 8   
+
+ 424   1          {
+ 425   2              if(dat&0x01)
+ 426   2                  SPI_DA2=1;
+ 427   2              else SPI_DA2=0;
+ 428   2              SPI_CLK2=0;
+ 429   2              Delay(6);
+ 430   2              SPI_CLK2=1;
+ 431   2              Delay(6);
+ 432   2              dat=dat>>1;
+ 433   2          }
+ 434   1      }
+ 435          unsigned char read_8bitB(void)//ÏÂ½µÑØÊä³ö
+ 436          {
+ 437   1          unsigned char xdata reData,i;
+ 438   1          SPI_DA2=1;
+ 439   1          reData=0;
+ 440   1          for(i=0; i<8; i++)
+ 441   1          {
+ 442   2              SPI_CLK2=0;
+ 443   2              Delay(6);
+ 444   2              SPI_CLK2=1;
+ 445   2              Delay(6);
+ 446   2              reData=reData>>1;
+ 447   2              if(SPI_DA2)
+ 448   2              {
+ 449   3                  reData=reData|0x80;
+ 450   3              }
+ 451   2          }
+ 452   1          return reData;
+ 453   1      }
+ 454          void commandB(unsigned char com)
+ 455          {
+ 456   1          SPI_STB2=1;
+ 457   1          Delay(6);
+ 458   1          SPI_STB2=0;
+ 459   1          send_8bitB(com);
+ 460   1      }
+ 461          /**************************************************************/
+ 462          void DisplayB(unsigned char da1,unsigned char da2,unsigned char da3,unsigned char da4)
+ 463          {
+ 464   1          static unsigned char xdata sda1=0;
+ 465   1          static unsigned char xdata sda2=0;
+ 466   1          static unsigned char xdata sda3=0;
+ 467   1          static unsigned char xdata sda4=0;
+ 468   1          if((sda1==da1)&&(sda2==da2)&&(sda3==da3)&&(sda4==da4))
+ 469   1              return;
+ 470   1          if(ErrCodeB==0x01)
+ 471   1          {
+ 472   2              da1=0x0D;
+ 473   2              da2=0x0A;
+ 474   2              da3=0x01;
+ 475   2              if(sda4==da4)
+ 476   2                  return;
+ 477   2          }
+ 478   1          commandB(0x01); //ÉèÖÃÏÔÊ¾Ä£Ê½£¬4Î»13¶ÎÄ£Ê½
+ 479   1          commandB(0x40); //ÉèÖÃÊý¾ÝÃüÁî,²ÉÓÃµØÖ·×Ô¶¯¼Ó1Ä£Ê½
+ 480   1          commandB(0xc0); //ÉèÖÃÏÔÊ¾µØÖ·£¬´Ó00H¿ªÊ¼
+ 481   1          send_8bitB(CODE[da1][0]);
+ 482   1          send_8bitB(CODE[da1][1]);
+ 483   1          send_8bitB(CODE[da2][0]);
+ 484   1          send_8bitB(CODE[da2][1]);
+ 485   1          send_8bitB(CODE[da3][0]);
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 9   
+
+ 486   1          send_8bitB(CODE[da3][1]);
+ 487   1          send_8bitB(0x00);
+ 488   1          send_8bitB(0x00);
+ 489   1          send_8bitB(da4);
+ 490   1          send_8bitB(0x00);
+ 491   1          commandB(0x8E); //ÏÔÊ¾¿ØÖÆÃüÁî£¬´ò¿ªÏÔÊ¾²¢ÉèÖÃÎª×îÁÁ
+ 492   1          SPI_STB2=1;
+ 493   1          sda1=da1;
+ 494   1          sda2=da2;
+ 495   1          sda3=da3;
+ 496   1          sda4=da4;
+ 497   1      }
+ 498          //******************************************************************************************************
+ 499          unsigned char CheckKeyB(void)//¶ÁÈ¡°´¼üÖµ
+ 500          {
+ 501   1          unsigned char xdata Key1,Key2,Key3,Key4,Key5;
+ 502   1          unsigned char KeyVal=0;
+ 503   1          commandB(0x42);//ÉèÖÃ¶ÁÈ¡°´¼üÖ¸Áî
+ 504   1          Key1=read_8bitB(); //
+ 505   1          Key2=read_8bitB();
+ 506   1          Key3=read_8bitB();//SW2A
+ 507   1          Key4=read_8bitB();//SW1A
+ 508   1          Key5=read_8bitB();//SW1B  SW2B
+ 509   1          KeyVal=0x00;
+ 510   1          if((Key1&0x01)>0)//±íÊ¾°´¼ü1
+ 511   1          {
+ 512   2              KeyVal=0x01;
+ 513   2          }
+ 514   1          else if((Key1&0x08)>0)//±íÊ¾°´¼ü2
+ 515   1          {
+ 516   2              KeyVal=0x02;
+ 517   2          }
+ 518   1          else if((Key2&0x01)>0)//±íÊ¾°´¼ü1
+ 519   1          {
+ 520   2              KeyVal=0x03;
+ 521   2          }
+ 522   1          else if((Key2&0x08)>0)//±íÊ¾°´¼ü2
+ 523   1          {
+ 524   2              KeyVal=0x04;
+ 525   2          }
+ 526   1          else if((Key3&0x01)>0)//±íÊ¾°´¼ü1
+ 527   1          {
+ 528   2              KeyVal=0x05;
+ 529   2          }
+ 530   1          else if((Key3&0x08)>0)//±íÊ¾°´¼ü2
+ 531   1          {
+ 532   2              KeyVal=0x06;
+ 533   2          }
+ 534   1          return KeyVal;
+ 535   1      }
+ 536          //*******************************************************************
+ 537          void  WriteTmp1Eeprom(void)
+ 538          {
+ 539   1          Write_EEPROM(TMP1_VAL,Temp1);
+ 540   1      }
+ 541          void  ReadTmp1Eeprom(void)
+ 542          {
+ 543   1          Temp1=Read_EEPROM(TMP1_VAL);
+ 544   1          if(Temp1>STMPMAX)//µ±¶ÁÈ¡Öµ²»ÔÚ·¶Î§Öµ »Ö¸´Ä¬ÈÏÖµ
+ 545   1          {
+ 546   2              Temp1=DAFETMP;
+ 547   2              WriteTmp1Eeprom();
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 10  
+
+ 548   2          }
+ 549   1      }
+ 550          void  WriteTmp2Eeprom(void)
+ 551          {
+ 552   1          Write_EEPROM(TMP2_VAL,Temp2);
+ 553   1      }
+ 554          void  ReadTmp2Eeprom(void)
+ 555          {
+ 556   1          Temp2=Read_EEPROM(TMP2_VAL);
+ 557   1          if(Temp2>STMPMAX)//µ±¶ÁÈ¡Öµ²»ÔÚ·¶Î§Öµ »Ö¸´Ä¬ÈÏÖµ
+ 558   1          {
+ 559   2              Temp2=DAFETMP;
+ 560   2              WriteTmp2Eeprom();
+ 561   2          }
+ 562   1      }
+ 563          //**************************************************************
+ 564          void  WriteTmp1BEeprom(void)
+ 565          {
+ 566   1          Write_EEPROM(TMP1B_VAL,Temp1);
+ 567   1      }
+ 568          void  ReadTmp1BEeprom(void)
+ 569          {
+ 570   1          Temp1=Read_EEPROM(TMP1B_VAL);
+ 571   1          if(Temp1>STMPMAX)//µ±¶ÁÈ¡Öµ²»ÔÚ·¶Î§Öµ »Ö¸´Ä¬ÈÏÖµ
+ 572   1          {
+ 573   2              Temp1=DAFETMP;
+ 574   2              WriteTmp1BEeprom();
+ 575   2          }
+ 576   1      }
+ 577          void  WriteTmp2BEeprom(void)
+ 578          {
+ 579   1          Write_EEPROM(TMP2B_VAL,Temp2);
+ 580   1      }
+ 581          void  ReadTmp2BEeprom(void)
+ 582          {
+ 583   1          Temp2=Read_EEPROM(TMP2B_VAL);
+ 584   1          if(Temp2>STMPMAX)//µ±¶ÁÈ¡Öµ²»ÔÚ·¶Î§Öµ »Ö¸´Ä¬ÈÏÖµ
+ 585   1          {
+ 586   2              Temp2=DAFETMP;
+ 587   2              WriteTmp2BEeprom();
+ 588   2          }
+ 589   1      }
+ 590          //*********************************************************************
+ 591          void TimCal(void)
+ 592          {
+ 593   1          TimeCc++;
+ 594   1          TimeCcB++;
+ 595   1          if(MkCafeTime<60000)
+ 596   1              MkCafeTime++;
+ 597   1          if(MkCafeTimeB<60000)
+ 598   1              MkCafeTimeB++;
+ 599   1          AutCtrTime++;
+ 600   1          AutCtrTimeB++;
+ 601   1          WDTR_CountClear();
+ 602   1      }
+ 603          
+ 604          //*******************************************************************************
+ 605          //ÐÂÌØ·þÁúÏß²»¸ÉÈÅ ½ðÊôÆÁ±ÎÏßÒ×¸ÉÈÅ
+ 606          #define TMP_OFFSET  0
+ 607          void FlashTempVal(void)
+ 608          {
+ 609   1          unsigned int t=0;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 11  
+
+ 610   1          static unsigned char  CurSenErr=0;
+ 611   1          unsigned char Flag_connect=0;
+ 612   1          t=MAX6675_ReadReg(1);
+ 613   1          Flag_connect=t&0x04;
+ 614   1          if(Flag_connect>0)
+ 615   1          {
+ 616   2              CurSenErr++;
+ 617   2              SenTemp=25;
+ 618   2          }
+ 619   1          else
+ 620   1          {
+ 621   2              CurSenErr=0;
+ 622   2              t=t>>3;
+ 623   2              SenTemp=t/4-TMP_OFFSET;
+ 624   2          }
+ 625   1          if(CurSenErr>5)
+ 626   1          {
+ 627   2              if(ErrCode!=0x01)
+ 628   2              {
+ 629   3                  ErrCode=0x01;
+ 630   3                  Display(0x0D,0x0A,0x01,Lamp);//ÏÔÊ¾´«¸ÐÆ÷¿ªÂ·E3
+ 631   3              }
+ 632   2              //swWorkState=OPT_STATE_ERR1;
+ 633   2          }
+ 634   1      }
+ 635          
+ 636          void FlashTempValB(void)
+ 637          {
+ 638   1          unsigned int t=0;
+ 639   1          static unsigned char  CurSenErr=0;
+ 640   1          unsigned char Flag_connect=0;
+ 641   1          t=MAX6675_ReadReg(2);
+ 642   1          Flag_connect=t&0x04;
+ 643   1          if(Flag_connect>0)
+ 644   1          {
+ 645   2              CurSenErr++;
+ 646   2              SenTempB=25;
+ 647   2          }
+ 648   1          else
+ 649   1          {
+ 650   2              CurSenErr=0;
+ 651   2              t=t>>3;
+ 652   2              SenTempB=t/4-TMP_OFFSET;
+ 653   2          }
+ 654   1          if(CurSenErr>5)
+ 655   1          {
+ 656   2              if(ErrCodeB!=0x01)
+ 657   2              {
+ 658   3                  ErrCodeB=0x01;
+ 659   3                  DisplayB(0x0D,0x0A,0x01,Lamp);//ÏÔÊ¾´«¸ÐÆ÷¿ªÂ·E3
+ 660   3              }
+ 661   2              //swWorkState=OPT_STATE_ERR1;
+ 662   2          }
+ 663   1      }
+ 664          
+ 665          
+ 666          
+ 667          
+ 668          extern unsigned char CheckShuiState(void);
+ 669          #define ZHEQITMP  130
+ 670          #define CAFETMP   124
+ 671          #define OFFSET_TMP  7
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 12  
+
+ 672          
+ 673          #define ZQVALL  120
+ 674          #define BU_2MIN  234  //120ÃëÊ±¼ä
+ 675          #define BU_FULL  20 //²¹Ë®Ê±¼ä ¼ì²âµ½Ë®Ö®ºó²¹10Ãë
+ 676          #define BEN_RA   20 //³éË®±Ã¸ÉÈÅ
+ 677          #define ZQVALH  125
+ 678          
+ 679          #define SHUI_FULL  0
+ 680          #define SHUI_EMPT  1
+ 681          void TemControlAuto(void)
+ 682          {
+ 683   1          unsigned char TemVal=0;
+ 684   1          unsigned char ShuiResult=0;
+ 685   1          unsigned int CalTemm=0;
+ 686   1      //***************************************************************
+ 687   1          if(AutCtrTime>(0.5*ONES))
+ 688   1          {
+ 689   2              AutCtrTime=0;
+ 690   2              FlashTempVal();
+ 691   2              if(HeatFlag==1)//±íÊ¾Òª½øÐÐ¼ÓÈÈ¡¢¼ì²âÎÂ¶È¡¢¼ì²âË®Î» Ñ­»·¿ØÖÆ
+ 692   2              {
+ 693   3                  if(P_SW==1)//¼ì²âÑ¹Á¦¿ª¹Ø
+ 694   3                  {
+ 695   4                      CT1_Z=0;
+ 696   4                      HeatFa=0x00;
+ 697   4                      StartMach=0x00;
+ 698   4                  }
+ 699   3                  else //±íÊ¾ÕôÆûÎÂ¶ÈµÍÓÚ130¶È ¿ªÊ¼¼ÓÈÈ
+ 700   3                  {
+ 701   4                      CT1_Z=1;
+ 702   4                      HeatFa=0xAA;
+ 703   4                  }
+ 704   3              }
+ 705   2              else
+ 706   2              {
+ 707   3                  CT1_Z=0;
+ 708   3                  HeatFa=0x00;
+ 709   3              }
+ 710   2              ShuiResult=CheckShuiState();
+ 711   2              switch(ShuiResult)
+ 712   2              {
+ 713   3              case SHUI_FULL:   //±íÊ¾ÒÑ¾­ÂúË®
+ 714   3                  if(ShuiFlag==1)
+ 715   3                  {
+ 716   4                      ShuiTime=0;
+ 717   4                      ShuiFlag=0x55;
+ 718   4                  }
+ 719   3                  if(ShuiFlag==0x55)
+ 720   3                  {
+ 721   4                      ShuiTime++;
+ 722   4                      if(ShuiTime>BU_FULL)//²¹Ë®10Ãë
+ 723   4                      {
+ 724   5                          ShuiFlag=0;
+ 725   5                          ShuiTime=0;
+ 726   5                          CT1_S=0;
+ 727   5                      }
+ 728   4                  }
+ 729   3                  break;
+ 730   3              case SHUI_EMPT://ÐèÒª²¹Ë®
+ 731   3                  if((ShuiFlag==0)&&((swWorkState==OPT_STATE_INIT)||(swWorkState==OPT_STATE_IDLE)))
+ 732   3                  {
+ 733   4                      CT1_S=1;//Æô¶¯²¹Ë®
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 13  
+
+ 734   4                      Delay(BEN_RA);//ÑÓÊ± ¼õÉÙÐÅºÅ¸ÉÈÅ
+ 735   4                      ShuiFlag=1;
+ 736   4                      ShuiTime=0;
+ 737   4                      Display(0x00,0x00,0x00,0x00);//
+ 738   4                  }
+ 739   3                  ShuiTime++;
+ 740   3                  Delay(100);
+ 741   3                  if(ShuiTime>BU_2MIN)//±íÊ¾²¹Ë®³¬¹ý2·ÖÖÓ
+ 742   3                  {
+ 743   4                      CT1_S=0;
+ 744   4                      ShuiFlag=0;
+ 745   4                      ShuiTime=0;
+ 746   4                      Display(0x0D,0x0A,0x02,Lamp);//ÏÔÊ¾²¹Ë®Ê§°Ü
+ 747   4                      swWorkState=OPT_STATE_ERR1;
+ 748   4                  }
+ 749   3                  break;
+ 750   3              default:
+ 751   3                  break;
+ 752   3              }
+ 753   2          }
+ 754   1      }
+ 755          
+ 756          void TemControlAutoB(void)
+ 757          {
+ 758   1          unsigned char TemVal=0;
+ 759   1          unsigned char ShuiResult=0;
+ 760   1          unsigned int CalTemm=0;
+ 761   1      //***************************************************************
+ 762   1          if(AutCtrTimeB>(0.5*ONES))
+ 763   1          {
+ 764   2              AutCtrTimeB=0;
+ 765   2              FlashTempValB();
+ 766   2              if(HeatFlagB==1)//±íÊ¾Òª½øÐÐ¼ÓÈÈ¡¢¼ì²âÎÂ¶È¡¢¼ì²âË®Î» Ñ­»·¿ØÖÆ
+ 767   2              {
+ 768   3                  if(P_SW2==1)//¼ì²âÑ¹Á¦¿ª¹Ø
+ 769   3                  {
+ 770   4                      CT2_Z=0;
+ 771   4                      HeatFaB=0x00;
+ 772   4                      StartMachB=0x00;
+ 773   4                  }
+ 774   3                  else //±íÊ¾ÕôÆûÎÂ¶ÈµÍÓÚ130¶È ¿ªÊ¼¼ÓÈÈ
+ 775   3                  {
+ 776   4                      CT2_Z=1;
+ 777   4                      HeatFaB=0xAA;
+ 778   4                  }
+ 779   3              }
+ 780   2              else
+ 781   2              {
+ 782   3                  CT2_Z=0;
+ 783   3                  HeatFaB=0x00;
+ 784   3              }
+ 785   2              ShuiResult=CheckShuiStateB();
+ 786   2              switch(ShuiResult)
+ 787   2              {
+ 788   3              case SHUI_FULL:   //±íÊ¾ÒÑ¾­ÂúË®
+ 789   3                  if(ShuiFlagB==1)
+ 790   3                  {
+ 791   4                      ShuiTimeB=0;
+ 792   4                      ShuiFlagB=0x55;
+ 793   4                  }
+ 794   3                  if(ShuiFlagB==0x55)
+ 795   3                  {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 14  
+
+ 796   4                      ShuiTimeB++;
+ 797   4                      if(ShuiTimeB>BU_FULL)//²¹Ë®10Ãë
+ 798   4                      {
+ 799   5                          ShuiFlagB=0;
+ 800   5                          ShuiTimeB=0;
+ 801   5                          CT2_S=0;
+ 802   5                      }
+ 803   4                  }
+ 804   3                  break;
+ 805   3              case SHUI_EMPT://ÐèÒª²¹Ë®
+ 806   3                  if((ShuiFlagB==0)&&((swWorkStateB==OPT_STATE_INIT)||(swWorkStateB==OPT_STATE_IDLE)))
+ 807   3                  {
+ 808   4                      CT2_S=1;//Æô¶¯²¹Ë®
+ 809   4                      Delay(BEN_RA);//ÑÓÊ± ¼õÉÙÐÅºÅ¸ÉÈÅ
+ 810   4                      ShuiFlagB=1;
+ 811   4                      ShuiTimeB=0;
+ 812   4                      DisplayB(0x00,0x00,0x00,0x00);//
+ 813   4                  }
+ 814   3                  ShuiTime++;
+ 815   3                  Delay(100);
+ 816   3                  if(ShuiTime>BU_2MIN)//±íÊ¾²¹Ë®³¬¹ý2·ÖÖÓ
+ 817   3                  {
+ 818   4                      CT2_S=0;
+ 819   4                      ShuiFlagB=0;
+ 820   4                      ShuiTimeB=0;
+ 821   4                      DisplayB(0x0D,0x0A,0x02,Lamp);//ÏÔÊ¾²¹Ë®Ê§°Ü
+ 822   4                      swWorkStateB=OPT_STATE_ERR1;
+ 823   4                  }
+ 824   3                  break;
+ 825   3              default:
+ 826   3                  break;
+ 827   3              }
+ 828   2          }
+ 829   1      }
+ 830          
+ 831          void  ExidWorkJob(void)
+ 832          {
+ 833   1      
+ 834   1      }
+ 835          void CafeWorkDoJob(void)
+ 836          {
+ 837   1      
+ 838   1      }
+ 839          void ClearWorkDoJob(unsigned char LED)
+ 840          {
+ 841   1          unsigned char Lmp=0;
+ 842   1          if(TempFlag==0)
+ 843   1          {
+ 844   2              if(LED==0x01)
+ 845   2              {
+ 846   3                  Lmp=0x02;
+ 847   3              }
+ 848   2              else
+ 849   2              {
+ 850   3                  Lmp=0x16;
+ 851   3              }
+ 852   2              if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+ 853   2              {
+ 854   3                  Display(0x0D,0x0B,0x0C,Lmp);//ÏÔÊ¾LO
+ 855   3              }
+ 856   2              else
+ 857   2              {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 15  
+
+ 858   3                  if(SenTemp<100)
+ 859   3                  {
+ 860   4                      Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,Lmp);//Ë¢ÐÂÊý¾Ý
+ 861   4                  }
+ 862   3                  else
+ 863   3                  {
+ 864   4                      Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFSET)%10,Lmp);
+             -//Ë¢ÐÂÊý¾Ý
+ 865   4                  }
+ 866   3              }
+ 867   2          }
+ 868   1          else
+ 869   1          {
+ 870   2              if(LED==0x01)
+ 871   2              {
+ 872   3                  Lmp=0x02;
+ 873   3              }
+ 874   2              else
+ 875   2              {
+ 876   3                  Lmp=0x1A;
+ 877   3              }
+ 878   2              if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+ 879   2              {
+ 880   3                  Display(0x0D,0x0B,0x0C,Lmp);//ÏÔÊ¾LO
+ 881   3              }
+ 882   2              else
+ 883   2              {
+ 884   3                  if(SenTemp<100)
+ 885   3                  {
+ 886   4                      Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,Lmp);//Ë¢ÐÂÊý¾Ý
+ 887   4                  }
+ 888   3                  else
+ 889   3                  {
+ 890   4                      Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFSET)%10,Lmp);
+             -//Ë¢ÐÂÊý¾Ý
+ 891   4                  }
+ 892   3              }
+ 893   2          }
+ 894   1      }
+ 895          
+ 896          void ProWorkState(void)
+ 897          {
+ 898   1          unsigned char RButKey=0;
+ 899   1      
+ 900   1          switch(swWorkState)
+ 901   1          {
+ 902   2          case OPT_STATE_INIT://³õÊ¼»¯
+ 903   2              if(ShuiFlag==0)
+ 904   2              {
+ 905   3                  if(TimeCc>(3*ONES))
+ 906   3                  {
+ 907   4                      TimeCc=0;
+ 908   4                      if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+ 909   4                      {
+ 910   5                          Display(0x0D,0x0B,0x0C,0x16);//ÏÔÊ¾LO
+ 911   5                      }
+ 912   4                      else
+ 913   4                      {
+ 914   5                          Display(0x0D,Temp1/10,Temp1%10,0x16);//Ë¢ÐÂÊý¾Ý
+ 915   5                      }
+ 916   4                      swWorkState=OPT_STATE_PREH;
+ 917   4                  }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 16  
+
+ 918   3              }
+ 919   2              break;
+ 920   2          case OPT_STATE_PREH://Ô¤ÈÈ
+ 921   2              if(CheckKey()==0)//±íÊ¾ËÉ¿ª°´¼ü
+ 922   2              {
+ 923   3                  HeatFlag=1;//±íÊ¾Æô¶¯¼ÓÈÈ¹¦ÄÜ
+ 924   3                  KeyTime=0;
+ 925   3                  TempFlag=0;
+ 926   3                  if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+ 927   3                  {
+ 928   4                      Display(0x0D,0x0B,0x0C,0x16);//ÏÔÊ¾LO
+ 929   4                  }
+ 930   3                  else
+ 931   3                  {
+ 932   4                      Display(0x0D,Temp1/10,Temp1%10,0x16);//Ë¢ÐÂÊý¾Ý
+ 933   4                  }
+ 934   3                  swWorkState=OPT_STATE_IDLE;
+ 935   3              }
+ 936   2              break;
+ 937   2          case OPT_STATE_IDLE://
+ 938   2              if(ShuiFlag==0)//±íÊ¾ÕýÔÚ²¹Ë®
+ 939   2              {
+ 940   3                  RButKey=CheckKey();
+ 941   3                  if(RButKey==START_SW)//±íÊ¾¿ªÆô°´¼ü
+ 942   3                  {
+ 943   4                      FlashTempVal();
+ 944   4                      HeadMaxTmp=SenTemp;//Ë¢ÐÂÒ»¸öÎÂ¶È ½â¾öÒ»½øÈë¾Í¼ì²âµ½ÉÏÒ»´ÎÎÂ¶È
+ 945   4                      KeyFlag=0xAA;
+ 946   4                      if(TempFlag==0)
+ 947   4                      {
+ 948   5                          swWorkState=OPT_STATE_HEAD1;
+ 949   5                          KeyTime=0;
+ 950   5                          MkCafeTime=0;
+ 951   5                          DelayTime=0;
+ 952   5                          CT1_C=1;
+ 953   5                          Delay(FA_RA);
+ 954   5                      }
+ 955   4                      else
+ 956   4                      {
+ 957   5                          swWorkState=OPT_STATE_HEAD2;
+ 958   5                          KeyTime=0;
+ 959   5                          MkCafeTime=0;
+ 960   5                          DelayTime=0;
+ 961   5                          CT1_C=1;
+ 962   5                          Delay(FA_RA);
+ 963   5                      }
+ 964   4                  }
+ 965   3                  else if((RButKey==CLEAR_SW)&&(KeyFlag==0))//±íÊ¾Çå½à
+ 966   3                  {
+ 967   4      
+ 968   4                      CT1_C=1;
+ 969   4                      Delay(FA_RA);
+ 970   4                      KeyFlag=0xBB;
+ 971   4                      KeyTime=0;
+ 972   4                      TimeCc=0;
+ 973   4                      ClearWorkDoJob(0x01);
+ 974   4                      swWorkState=OPT_STATE_CLERA;
+ 975   4      
+ 976   4                  }
+ 977   3                  else if(RButKey==TMP1_SW)//±íÊ¾Ñ¡ÔñÎÂ¶È1
+ 978   3                  {
+ 979   4      
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 17  
+
+ 980   4                      if(TempFlag==1)
+ 981   4                      {
+ 982   5                          TempFlag=0;
+ 983   5                      }
+ 984   4                      Display(0x0D,Temp1/10,Temp1%10,0x16);//Ë¢ÐÂÊý¾Ý
+ 985   4                      TimeCc=0;
+ 986   4                      KeyTime++;
+ 987   4                      if(KeyTime>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+ 988   4                      {
+ 989   5                          swWorkState=OPT_STATE_SHEAD1;
+ 990   5                          KeyTime=0;
+ 991   5                          TimeCc=0;
+ 992   5                          Display(0x0D,Temp1/10,Temp1%10,0x25);//Ë¢ÐÂÊý¾Ý
+ 993   5                      }
+ 994   4                  }
+ 995   3                  else if(RButKey==TMP2_SW)//±íÊ¾Ñ¡ÔñÎÂ¶È2
+ 996   3                  {
+ 997   4                      if(TempFlag==0)
+ 998   4                      {
+ 999   5                          TempFlag=1;
+1000   5                      }
+1001   4                      Display(0x0D,Temp2/10,Temp2%10,0x1A);//Ë¢ÐÂÊý¾Ý
+1002   4                      KeyTime++;
+1003   4                      TimeCc=0;
+1004   4                      if(KeyTime>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1005   4                      {
+1006   5                          swWorkState=OPT_STATE_SHEAD2;
+1007   5                          KeyTime=0;
+1008   5                          Display(0x0D,Temp2/10,Temp2%10,0x29);//Ë¢ÐÂÊý¾Ý
+1009   5                      }
+1010   4                  }
+1011   3                  else if(TimeCc>(0.8*ONES))
+1012   3                  {
+1013   4                      KeyTime=0;
+1014   4                      KeyFlag=0;
+1015   4                      TimeCc=0;
+1016   4                      if(TempFlag==0)
+1017   4                      {
+1018   5                          if(((Lamp&0x10)>0)&&(HeatFa==0xAA)&&(StartMach==0xAA))
+1019   5                          {
+1020   6                              Lamp=0x06;
+1021   6                          }
+1022   5                          else
+1023   5                          {
+1024   6                              Lamp=0x16;
+1025   6                          }
+1026   5                          if(SenTemp<(TMELOW-1))//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1027   5                          {
+1028   6                              Display(0x0D,0x0B,0x0C,Lamp);//ÏÔÊ¾LO
+1029   6                          }
+1030   5                          else if(SenTemp>TMELOW)
+1031   5                          {
+1032   6                              if(SenTemp<100)
+1033   6                              {
+1034   7                                  Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,Lamp);//Ë¢ÐÂÊý¾Ý
+1035   7                              }
+1036   6                              else
+1037   6                              {
+1038   7                                  Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFS
+             -ET)%10,Lamp);//Ë¢ÐÂÊý¾Ý
+1039   7                              }
+1040   6                          }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 18  
+
+1041   5                      }
+1042   4                      else
+1043   4                      {
+1044   5                          if(((Lamp&0x10)>0)&&(HeatFa==0xAA)&&(StartMach==0xAA))
+1045   5                          {
+1046   6                              Lamp=0x0A;
+1047   6                          }
+1048   5                          else
+1049   5                          {
+1050   6                              Lamp=0x1A;
+1051   6                          }
+1052   5                          if(SenTemp<(TMELOW-1))//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1053   5                          {
+1054   6                              Display(0x0D,0x0B,0x0C,0x1A);//ÏÔÊ¾LO
+1055   6                          }
+1056   5                          else if(SenTemp>TMELOW)
+1057   5                          {
+1058   6                              if(SenTemp<100)
+1059   6                              {
+1060   7                                  Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,Lamp);//Ë¢ÐÂÊý¾Ý
+1061   7                              }
+1062   6                              else
+1063   6                              {
+1064   7                                  Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFS
+             -ET)%10,Lamp);//Ë¢ÐÂÊý¾Ý
+1065   7                              }
+1066   6                          }
+1067   5                      }
+1068   4                  }
+1069   3              }
+1070   2              break;
+1071   2          case OPT_STATE_HEAD1://±íÊ¾¼ÓÈÈ×´Ì¬1
+1072   2              if(TimeCc>(0.5*ONES))
+1073   2              {
+1074   3                  TimeCc=0;
+1075   3                  DelayTime++;
+1076   3                  if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1077   3                  {
+1078   4                      Display(0x0D,0x0B,0x0C,0x14);//ÏÔÊ¾LO
+1079   4                  }
+1080   3                  else
+1081   3                  {
+1082   4                      if(SenTemp<100)
+1083   4                      {
+1084   5                          Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,0x14);//Ë¢ÐÂÊý¾Ý
+1085   5                      }
+1086   4                      else
+1087   4                      {
+1088   5                          Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFSET)%10,0
+             -x14);//Ë¢ÐÂÊý¾Ý
+1089   5                      }
+1090   4                  }
+1091   3              }
+1092   2              HeadMaxTmp=SenTemp;
+1093   2              if(SenTemp>=Temp1)
+1094   2              {
+1095   3                  KeyTime++;
+1096   3                  if((KeyTime>6)&&(MkCafeTime>(5*ONES)))
+1097   3                  {
+1098   4                      CT1_C=0;
+1099   4                      Delay(FA_RA);
+1100   4                      KeyTime=0;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 19  
+
+1101   4                      swWorkState=OPT_STATE_IDLE;
+1102   4                  }
+1103   3              }
+1104   2              else
+1105   2              {
+1106   3                  KeyTime=0;
+1107   3                  if(DelayTime>360)//±íÊ¾³¬Ê±ÍË³ö
+1108   3                  {
+1109   4                      CT1_C=0;
+1110   4                      Delay(FA_RA);
+1111   4                      KeyTime=0;
+1112   4                      swWorkState=OPT_STATE_IDLE;
+1113   4                  }
+1114   3              }
+1115   2              KeyBut=CheckKey();
+1116   2              if((KeyBut==START_SW)&&(KeyFlag==0))//±íÊ¾
+1117   2              {
+1118   3                  KeyFlag=1;
+1119   3              }
+1120   2              else if((KeyFlag==1)&&(KeyBut==0))
+1121   2              {
+1122   3                  CT1_C=0;
+1123   3                  Delay(FA_RA);
+1124   3                  KeyTime=0;
+1125   3                  swWorkState=OPT_STATE_IDLE;
+1126   3              }
+1127   2              else if(KeyBut==0)
+1128   2              {
+1129   3                  KeyFlag=0;
+1130   3              }
+1131   2              break;
+1132   2          case OPT_STATE_HEAD2://±íÊ¾¼ÓÈÈ×´Ì¬2
+1133   2              if(TimeCc>(0.5*ONES))
+1134   2              {
+1135   3                  TimeCc=0;
+1136   3                  DelayTime++;
+1137   3                  if(SenTemp<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1138   3                  {
+1139   4                      Display(0x0D,0x0B,0x0C,0x18);//ÏÔÊ¾Lo
+1140   4                  }
+1141   3                  else
+1142   3                  {
+1143   4                      if(SenTemp<100)
+1144   4                      {
+1145   5                          Display(0x0D,(SenTemp+TMP_OFFSET)/10,(SenTemp+TMP_OFFSET)%10,0x18);//Ë¢ÐÂÊý¾Ý
+1146   5                      }
+1147   4                      else
+1148   4                      {
+1149   5                          Display((SenTemp+TMP_OFFSET)/100,(SenTemp+TMP_OFFSET-100)/10,(SenTemp+TMP_OFFSET)%10,0
+             -x18);//Ë¢ÐÂÊý¾Ý
+1150   5                      }
+1151   4                  }
+1152   3              }
+1153   2              HeadMaxTmp=SenTemp;
+1154   2              if(SenTemp>=Temp2)
+1155   2              {
+1156   3                  KeyTime++;
+1157   3                  if((KeyTime>6)&&(MkCafeTime>(5*ONES)))
+1158   3                  {
+1159   4                      CT1_C=0;
+1160   4                      Delay(FA_RA);
+1161   4                      swWorkState=OPT_STATE_IDLE;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 20  
+
+1162   4                  }
+1163   3              }
+1164   2              else
+1165   2              {
+1166   3                  KeyTime=0;
+1167   3                  if(DelayTime>360)//±íÊ¾³¬Ê±ÍË³ö
+1168   3                  {
+1169   4                      CT1_C=0;
+1170   4                      Delay(FA_RA);
+1171   4                      KeyTime=0;
+1172   4                      swWorkState=OPT_STATE_IDLE;
+1173   4                  }
+1174   3              }
+1175   2              KeyBut=CheckKey();
+1176   2              if((KeyBut==START_SW)&&(KeyFlag==0))//±íÊ¾
+1177   2              {
+1178   3                  KeyFlag=1;
+1179   3              }
+1180   2              else if((KeyFlag==1)&&(KeyBut==0))
+1181   2              {
+1182   3                  CT1_C=0;
+1183   3                  Delay(FA_RA);
+1184   3                  KeyTime=0;
+1185   3                  swWorkState=OPT_STATE_IDLE;
+1186   3              }
+1187   2              else if(KeyBut==0)
+1188   2              {
+1189   3                  KeyFlag=0;
+1190   3              }
+1191   2              break;
+1192   2          case OPT_STATE_CLERA://±íÊ¾Çå½à×´Ì¬
+1193   2              KeyBut=CheckKey();
+1194   2              if(KeyBut==CLEAR_SW)//±íÊ¾Çå½à
+1195   2              {
+1196   3                  KeyTime++;
+1197   3                  if(KeyTime>KeyLong)//±íÊ¾½øÈëÇå¿ÕìÒÌå
+1198   3                  {
+1199   4                      KeyTime=0;
+1200   4                      KeyFlag=0xBB;
+1201   4                      HeatFlag=0;//¹Ø±ÕìÒÌå¼ÓÈÈ¹¦ÄÜ
+1202   4                      MkCafeTime=0;
+1203   4                      CT1_S=1;//Æô¶¯²¹Ë®
+1204   4                      swWorkState=OPT_STATE_CLERB;
+1205   4                      if(TempFlag==0)
+1206   4                      {
+1207   5                          Display(0x03,0x03,0x03,0x16);//ÏÔÊ¾LO
+1208   5                      }
+1209   4                      else
+1210   4                      {
+1211   5                          Display(0x03,0x03,0x03,0x1A);//ÏÔÊ¾LO
+1212   5                      }
+1213   4                  }
+1214   3              }
+1215   2              else
+1216   2              {
+1217   3                  if(TimeCc>(3*ONES))
+1218   3                  {
+1219   4                      swWorkState=OPT_STATE_IDLE;
+1220   4                      ClearWorkDoJob(0x02);
+1221   4                      CT1_C=0;
+1222   4                      Delay(FA_RA);
+1223   4                  }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 21  
+
+1224   3              }
+1225   2              if(((KeyBut==START_SW)||(KeyBut==CLEAR_SW))&&(KeyFlag==0))//±íÊ¾
+1226   2              {
+1227   3                  KeyFlag=1;
+1228   3              }
+1229   2              else if((KeyFlag==1)&&(KeyBut==0))
+1230   2              {
+1231   3                  swWorkState=OPT_STATE_IDLE;
+1232   3                  ClearWorkDoJob(0x02);
+1233   3                  CT1_C=0;
+1234   3                  Delay(FA_RA);
+1235   3              }
+1236   2              else if(KeyBut==0)
+1237   2              {
+1238   3                  KeyFlag=0;
+1239   3              }
+1240   2              break;
+1241   2          case OPT_STATE_CLERB://±íÊ¾Çå¿ÕìÒÌå
+1242   2              //Çå¿ÕìÒÌåÊ±¼ä
+1243   2              if((CheckKey()==CLEAR_SW)&&(KeyFlag==0)&&(TimeCc>(2*ONES)))//±íÊ¾Çå½à
+1244   2              {
+1245   3                  swWorkState=OPT_STATE_IDLE;
+1246   3                  ClearWorkDoJob(0x02);
+1247   3                  CT1_C=0;
+1248   3                  CT1_S=0;//¹Ø±Õ²¹Ë®
+1249   3                  Delay(FA_RA);
+1250   3                  HeatFlag=1;
+1251   3                  KeyFlag=0xBB;
+1252   3              }
+1253   2              else if(CheckKey()==0)
+1254   2              {
+1255   3                  KeyFlag=0;
+1256   3                  TimeCc=0;
+1257   3              }
+1258   2              if(MkCafeTime>(10*ONES))
+1259   2              {
+1260   3                  CT1_S=0;//Æô¶¯²¹Ë®
+1261   3                  MkCafeTime=0;
+1262   3              }
+1263   2              break;
+1264   2          case OPT_STATE_SHEAD1://ÉèÖÃÎÂ¶È¼ÓÈÈÖµ1
+1265   2              if(CheckKey()==ADD_SW)//±íÊ¾
+1266   2              {
+1267   3                  if(Temp1<STMPMAX)
+1268   3                      Temp1++;
+1269   3                  Display(0x0D,Temp1/10,Temp1%10,0x25);//Ë¢ÐÂÊý¾Ý
+1270   3                  Delay(100);
+1271   3                  KeyTime=0;
+1272   3              }
+1273   2              else if(CheckKey()==SUB_SW)//±íÊ¾
+1274   2              {
+1275   3                  if(Temp1>STMPMIN)
+1276   3                      Temp1--;
+1277   3                  Display(0x0D,Temp1/10,Temp1%10,0x25);//Ë¢ÐÂÊý¾Ý
+1278   3                  Delay(100);
+1279   3                  KeyTime=0;
+1280   3              }
+1281   2              else if(CheckKey()==TMP1_SW)//±íÊ¾
+1282   2              {
+1283   3                  KeyTime++;
+1284   3                  if(KeyTime>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1285   3                  {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 22  
+
+1286   4                      //±£´æÊý¾Ý
+1287   4                      WriteTmp1Eeprom();
+1288   4                      swWorkState=OPT_STATE_IDLE;
+1289   4                      HeatFlag=1;
+1290   4                      KeyTime=0;
+1291   4                      Display(0x0D,Temp1/10,Temp1%10,0x16);//Ë¢ÐÂÊý¾Ý
+1292   4                      TimeCc=0;
+1293   4                  }
+1294   3              }
+1295   2              else
+1296   2              {
+1297   3                  if(TimeCc>(0.8*ONES))
+1298   3                  {
+1299   4                      TimeCc=0;
+1300   4                      if(LedOnOFF==0x21)
+1301   4                      {
+1302   5                          LedOnOFF=0x25;
+1303   5                      }
+1304   4                      else
+1305   4                      {
+1306   5                          LedOnOFF=0x21;
+1307   5                      }
+1308   4                      Display(0x0D,Temp1/10,Temp1%10,LedOnOFF);
+1309   4                  }
+1310   3      
+1311   3              }
+1312   2              break;
+1313   2          case OPT_STATE_SHEAD2://ÉèÖÃÎÂ¶È¼ÓÈÈÖµ2
+1314   2              if(CheckKey()==ADD_SW)//±íÊ¾
+1315   2              {
+1316   3                  if(Temp2<STMPMAX)
+1317   3                      Temp2++;
+1318   3                  Display(0x0D,Temp2/10,Temp2%10,0x29);//Ë¢ÐÂÊý¾Ý
+1319   3                  KeyTime=0;
+1320   3                  Delay(100);
+1321   3              }
+1322   2              else if(CheckKey()==SUB_SW)//±íÊ¾
+1323   2              {
+1324   3                  if(Temp2>STMPMIN)
+1325   3                      Temp2--;
+1326   3                  Display(0x0D,Temp2/10,Temp2%10,0x29);//Ë¢ÐÂÊý¾Ý
+1327   3                  KeyTime=0;
+1328   3                  Delay(100);
+1329   3              }
+1330   2              else if(CheckKey()==TMP2_SW)//±íÊ¾
+1331   2              {
+1332   3                  KeyTime++;
+1333   3                  if(KeyTime>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1334   3                  {
+1335   4                      //±£´æÊý¾Ý
+1336   4                      WriteTmp2Eeprom();
+1337   4                      swWorkState=OPT_STATE_IDLE;
+1338   4                      HeatFlag=1;
+1339   4                      KeyTime=0;
+1340   4                      Display(0x0D,Temp2/10,Temp2%10,0x1A);//Ë¢ÐÂÊý¾Ý
+1341   4                      TimeCc=0;
+1342   4                  }
+1343   3              }
+1344   2              else
+1345   2              {
+1346   3                  if(TimeCc>(0.8*ONES))
+1347   3                  {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 23  
+
+1348   4                      TimeCc=0;
+1349   4                      if(LedOnOFF==0x21)
+1350   4                      {
+1351   5                          LedOnOFF=0x29;
+1352   5                      }
+1353   4                      else
+1354   4                      {
+1355   5                          LedOnOFF=0x21;
+1356   5                      }
+1357   4                      Display(0x0D,Temp2/10,Temp2%10,LedOnOFF);
+1358   4                  }
+1359   3              }
+1360   2              break;
+1361   2          case OPT_STATE_ERR1://²»¿É»Ö¸´´íÎó ²¹Ë®Ê§°Ü ³¬¹ý2·ÖÖÓ
+1362   2              HeatFlag=0;
+1363   2              CT1_C=0;
+1364   2              CT1_Z=0;
+1365   2              CT1_S=0;
+1366   2              break;
+1367   2          default:
+1368   2              swWorkState=OPT_STATE_INIT;
+1369   2              break;
+1370   2      
+1371   2          }
+1372   1      }
+1373          
+1374          void ProWorkStateB(void)
+1375          {
+1376   1          unsigned char RButKey=0;
+1377   1      
+1378   1          switch(swWorkStateB)
+1379   1          {
+1380   2          case OPT_STATE_INIT://³õÊ¼»¯
+1381   2              if(ShuiFlagB==0)
+1382   2              {
+1383   3                  if(TimeCcB>(3*ONES))
+1384   3                  {
+1385   4                      TimeCcB=0;
+1386   4                      if(SenTempB<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1387   4                      {
+1388   5                          DisplayB(0x0D,0x0B,0x0C,0x16);//ÏÔÊ¾LO
+1389   5                      }
+1390   4                      else
+1391   4                      {
+1392   5                          DisplayB(0x0D,Temp1B/10,Temp1B%10,0x16);//Ë¢ÐÂÊý¾Ý
+1393   5                      }
+1394   4                      swWorkStateB=OPT_STATE_PREH;
+1395   4                  }
+1396   3              }
+1397   2              break;
+1398   2          case OPT_STATE_PREH://Ô¤ÈÈ
+1399   2              if(CheckKeyB()==0)//±íÊ¾ËÉ¿ª°´¼ü
+1400   2              {
+1401   3                  HeatFlagB=1;//±íÊ¾Æô¶¯¼ÓÈÈ¹¦ÄÜ
+1402   3                  KeyTimeB=0;
+1403   3                  TempFlagB=0;
+1404   3                  if(SenTempB<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1405   3                  {
+1406   4                      DisplayB(0x0D,0x0B,0x0C,0x16);//ÏÔÊ¾LO
+1407   4                  }
+1408   3                  else
+1409   3                  {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 24  
+
+1410   4                      DisplayB(0x0D,Temp1B/10,Temp1B%10,0x16);//Ë¢ÐÂÊý¾Ý
+1411   4                  }
+1412   3                  swWorkStateB=OPT_STATE_IDLE;
+1413   3              }
+1414   2              break;
+1415   2          case OPT_STATE_IDLE://
+1416   2              if(ShuiFlagB==0)//±íÊ¾ÕýÔÚ²¹Ë®
+1417   2              {
+1418   3                  RButKey=CheckKeyB();
+1419   3                  if(RButKey==START_SW)//±íÊ¾¿ªÆô°´¼ü
+1420   3                  {
+1421   4                      FlashTempValB();
+1422   4                      HeadMaxTmpB=SenTempB;//Ë¢ÐÂÒ»¸öÎÂ¶È ½â¾öÒ»½øÈë¾Í¼ì²âµ½ÉÏÒ»´ÎÎÂ¶È
+1423   4                      KeyFlagB=0xAA;
+1424   4                      if(TempFlagB==0)
+1425   4                      {
+1426   5                          swWorkStateB=OPT_STATE_HEAD1;
+1427   5                          KeyTimeB=0;
+1428   5                          MkCafeTimeB=0;
+1429   5                          DelayTimeB=0;
+1430   5                          CT2_C=1;
+1431   5                          Delay(FA_RA);
+1432   5                      }
+1433   4                      else
+1434   4                      {
+1435   5                          swWorkStateB=OPT_STATE_HEAD2;
+1436   5                          KeyTimeB=0;
+1437   5                          MkCafeTimeB=0;
+1438   5                          DelayTimeB=0;
+1439   5                          CT2_C=1;
+1440   5                          Delay(FA_RA);
+1441   5                      }
+1442   4                  }
+1443   3                  else if((RButKey==CLEAR_SW)&&(KeyFlagB==0))//±íÊ¾Çå½à
+1444   3                  {
+1445   4      
+1446   4                      CT2_C=1;
+1447   4                      Delay(FA_RA);
+1448   4                      KeyFlagB=0xBB;
+1449   4                      KeyTimeB=0;
+1450   4                      TimeCcB=0;
+1451   4                      ClearWorkDoJob(0x01);
+1452   4                      swWorkStateB=OPT_STATE_CLERA;
+1453   4      
+1454   4                  }
+1455   3                  else if(RButKey==TMP1_SW)//±íÊ¾Ñ¡ÔñÎÂ¶È1
+1456   3                  {
+1457   4      
+1458   4                      if(TempFlagB==1)
+1459   4                      {
+1460   5                          TempFlagB=0;
+1461   5                      }
+1462   4                      DisplayB(0x0D,Temp1B/10,Temp1B%10,0x16);//Ë¢ÐÂÊý¾Ý
+1463   4                      TimeCcB=0;
+1464   4                      KeyTimeB++;
+1465   4                      if(KeyTimeB>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1466   4                      {
+1467   5                          swWorkStateB=OPT_STATE_SHEAD1;
+1468   5                          KeyTimeB=0;
+1469   5                          TimeCcB=0;
+1470   5                          DisplayB(0x0D,Temp1B/10,Temp1B%10,0x25);//Ë¢ÐÂÊý¾Ý
+1471   5                      }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 25  
+
+1472   4                  }
+1473   3                  else if(RButKey==TMP2_SW)//±íÊ¾Ñ¡ÔñÎÂ¶È2
+1474   3                  {
+1475   4                      if(TempFlagB==0)
+1476   4                      {
+1477   5                          TempFlagB=1;
+1478   5                      }
+1479   4                      DisplayB(0x0D,Temp2B/10,Temp2B%10,0x1A);//Ë¢ÐÂÊý¾Ý
+1480   4                      KeyTimeB++;
+1481   4                      TimeCcB=0;
+1482   4                      if(KeyTimeB>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1483   4                      {
+1484   5                          swWorkStateB=OPT_STATE_SHEAD2;
+1485   5                          KeyTimeB=0;
+1486   5                          DisplayB(0x0D,Temp2B/10,Temp2B%10,0x29);//Ë¢ÐÂÊý¾Ý
+1487   5                      }
+1488   4                  }
+1489   3                  else if(TimeCcB>(0.8*ONES))
+1490   3                  {
+1491   4                      KeyTimeB=0;
+1492   4                      KeyFlagB=0;
+1493   4                      TimeCcB=0;
+1494   4                      if(TempFlagB==0)
+1495   4                      {
+1496   5                          if(((LampB&0x10)>0)&&(HeatFaB==0xAA)&&(StartMachB==0xAA))
+1497   5                          {
+1498   6                              LampB=0x06;
+1499   6                          }
+1500   5                          else
+1501   5                          {
+1502   6                              LampB=0x16;
+1503   6                          }
+1504   5                          if(SenTempB<(TMELOW-1))//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1505   5                          {
+1506   6                              DisplayB(0x0D,0x0B,0x0C,LampB);//ÏÔÊ¾LO
+1507   6                          }
+1508   5                          else if(SenTempB>TMELOW)
+1509   5                          {
+1510   6                              if(SenTempB<100)
+1511   6                              {
+1512   7                                  DisplayB(0x0D,(SenTempB+TMP_OFFSET)/10,(SenTempB+TMP_OFFSET)%10,LampB);//Ë¢ÐÂÊ
+             -ý¾Ý
+1513   7                              }
+1514   6                              else
+1515   6                              {
+1516   7                                  DisplayB((SenTempB+TMP_OFFSET)/100,(SenTempB+TMP_OFFSET-100)/10,(SenTempB+TMP_
+             -OFFSET)%10,LampB);//Ë¢ÐÂÊý¾Ý
+1517   7                              }
+1518   6                          }
+1519   5                      }
+1520   4                      else
+1521   4                      {
+1522   5                          if(((LampB&0x10)>0)&&(HeatFaB==0xAA)&&(StartMachB==0xAA))
+1523   5                          {
+1524   6                              LampB=0x0A;
+1525   6                          }
+1526   5                          else
+1527   5                          {
+1528   6                              LampB=0x1A;
+1529   6                          }
+1530   5                          if(SenTempB<(TMELOW-1))//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1531   5                          {
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 26  
+
+1532   6                              DisplayB(0x0D,0x0B,0x0C,0x1A);//ÏÔÊ¾LO
+1533   6                          }
+1534   5                          else if(SenTempB>TMELOW)
+1535   5                          {
+1536   6                              if(SenTempB<100)
+1537   6                              {
+1538   7                                  DisplayB(0x0D,(SenTempB+TMP_OFFSET)/10,(SenTempB+TMP_OFFSET)%10,LampB);//Ë¢ÐÂÊ
+             -ý¾Ý
+1539   7                              }
+1540   6                              else
+1541   6                              {
+1542   7                                  DisplayB((SenTempB+TMP_OFFSET)/100,(SenTempB+TMP_OFFSET-100)/10,(SenTempB+TMP_
+             -OFFSET)%10,LampB);//Ë¢ÐÂÊý¾Ý
+1543   7                              }
+1544   6                          }
+1545   5                      }
+1546   4                  }
+1547   3              }
+1548   2              break;
+1549   2          case OPT_STATE_HEAD1://±íÊ¾¼ÓÈÈ×´Ì¬1
+1550   2              if(TimeCcB>(0.5*ONES))
+1551   2              {
+1552   3                  TimeCcB=0;
+1553   3                  DelayTimeB++;
+1554   3                  if(SenTempB<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1555   3                  {
+1556   4                      DisplayB(0x0D,0x0B,0x0C,0x14);//ÏÔÊ¾LO
+1557   4                  }
+1558   3                  else
+1559   3                  {
+1560   4                      if(SenTempB<100)
+1561   4                      {
+1562   5                          DisplayB(0x0D,(SenTempB+TMP_OFFSET)/10,(SenTempB+TMP_OFFSET)%10,0x14);//Ë¢ÐÂÊý¾Ý
+1563   5                      }
+1564   4                      else
+1565   4                      {
+1566   5                          DisplayB((SenTempB+TMP_OFFSET)/100,(SenTempB+TMP_OFFSET-100)/10,(SenTempB+TMP_OFFSET)%
+             -10,0x14);//Ë¢ÐÂÊý¾Ý
+1567   5                      }
+1568   4                  }
+1569   3              }
+1570   2              HeadMaxTmpB=SenTempB;
+1571   2              if(SenTempB>=Temp1B)
+1572   2              {
+1573   3                  KeyTimeB++;
+1574   3                  if((KeyTimeB>6)&&(MkCafeTimeB>(5*ONES)))
+1575   3                  {
+1576   4                      CT2_C=0;
+1577   4                      Delay(FA_RA);
+1578   4                      KeyTimeB=0;
+1579   4                      swWorkStateB=OPT_STATE_IDLE;
+1580   4                  }
+1581   3              }
+1582   2              else
+1583   2              {
+1584   3                  KeyTimeB=0;
+1585   3                  if(DelayTimeB>360)//±íÊ¾³¬Ê±ÍË³ö
+1586   3                  {
+1587   4                      CT2_C=0;
+1588   4                      Delay(FA_RA);
+1589   4                      KeyTimeB=0;
+1590   4                      swWorkStateB=OPT_STATE_IDLE;
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 27  
+
+1591   4                  }
+1592   3              }
+1593   2              KeyBut=CheckKeyB();
+1594   2              if((KeyBut==START_SW)&&(KeyFlagB==0))//±íÊ¾
+1595   2              {
+1596   3                  KeyFlagB=1;
+1597   3              }
+1598   2              else if((KeyFlagB==1)&&(KeyBut==0))
+1599   2              {
+1600   3                  CT2_C=0;
+1601   3                  Delay(FA_RA);
+1602   3                  KeyTimeB=0;
+1603   3                  swWorkStateB=OPT_STATE_IDLE;
+1604   3              }
+1605   2              else if(KeyBut==0)
+1606   2              {
+1607   3                  KeyFlagB=0;
+1608   3              }
+1609   2              break;
+1610   2          case OPT_STATE_HEAD2://±íÊ¾¼ÓÈÈ×´Ì¬2
+1611   2              if(TimeCcB>(0.5*ONES))
+1612   2              {
+1613   3                  TimeCcB=0;
+1614   3                  DelayTimeB++;
+1615   3                  if(SenTempB<TMELOW)//±íÊ¾ÕôÆûÐ¡ÓÚ35¶È
+1616   3                  {
+1617   4                      DisplayB(0x0D,0x0B,0x0C,0x18);//ÏÔÊ¾Lo
+1618   4                  }
+1619   3                  else
+1620   3                  {
+1621   4                      if(SenTempB<100)
+1622   4                      {
+1623   5                          DisplayB(0x0D,(SenTempB+TMP_OFFSET)/10,(SenTempB+TMP_OFFSET)%10,0x18);//Ë¢ÐÂÊý¾Ý
+1624   5                      }
+1625   4                      else
+1626   4                      {
+1627   5                          DisplayB((SenTempB+TMP_OFFSET)/100,(SenTempB+TMP_OFFSET-100)/10,(SenTempB+TMP_OFFSET)%
+             -10,0x18);//Ë¢ÐÂÊý¾Ý
+1628   5                      }
+1629   4                  }
+1630   3              }
+1631   2              HeadMaxTmp=SenTempB;
+1632   2              if(SenTempB>=Temp2B)
+1633   2              {
+1634   3                  KeyTimeB++;
+1635   3                  if((KeyTimeB>6)&&(MkCafeTimeB>(5*ONES)))
+1636   3                  {
+1637   4                      CT2_C=0;
+1638   4                      Delay(FA_RA);
+1639   4                      swWorkStateB=OPT_STATE_IDLE;
+1640   4                  }
+1641   3              }
+1642   2              else
+1643   2              {
+1644   3                  KeyTimeB=0;
+1645   3                  if(DelayTimeB>360)//±íÊ¾³¬Ê±ÍË³ö
+1646   3                  {
+1647   4                      CT2_C=0;
+1648   4                      Delay(FA_RA);
+1649   4                      KeyTimeB=0;
+1650   4                      swWorkStateB=OPT_STATE_IDLE;
+1651   4                  }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 28  
+
+1652   3              }
+1653   2              KeyBut=CheckKeyB();
+1654   2              if((KeyBut==START_SW)&&(KeyFlagB==0))//±íÊ¾
+1655   2              {
+1656   3                  KeyFlagB=1;
+1657   3              }
+1658   2              else if((KeyFlagB==1)&&(KeyBut==0))
+1659   2              {
+1660   3                  CT2_C=0;
+1661   3                  Delay(FA_RA);
+1662   3                  KeyTimeB=0;
+1663   3                  swWorkStateB=OPT_STATE_IDLE;
+1664   3              }
+1665   2              else if(KeyBut==0)
+1666   2              {
+1667   3                  KeyFlagB=0;
+1668   3              }
+1669   2              break;
+1670   2          case OPT_STATE_CLERA://±íÊ¾Çå½à×´Ì¬
+1671   2              KeyBut=CheckKeyB();
+1672   2              if(KeyBut==CLEAR_SW)//±íÊ¾Çå½à
+1673   2              {
+1674   3                  KeyTimeB++;
+1675   3                  if(KeyTimeB>KeyLong)//±íÊ¾½øÈëÇå¿ÕìÒÌå
+1676   3                  {
+1677   4                      KeyTimeB=0;
+1678   4                      KeyFlagB=0xBB;
+1679   4                      HeatFlagB=0;//¹Ø±ÕìÒÌå¼ÓÈÈ¹¦ÄÜ
+1680   4                      MkCafeTimeB=0;
+1681   4                      CT2_S=1;//Æô¶¯²¹Ë®
+1682   4                      swWorkStateB=OPT_STATE_CLERB;
+1683   4                      if(TempFlagB==0)
+1684   4                      {
+1685   5                          DisplayB(0x03,0x03,0x03,0x16);//ÏÔÊ¾LO
+1686   5                      }
+1687   4                      else
+1688   4                      {
+1689   5                          DisplayB(0x03,0x03,0x03,0x1A);//ÏÔÊ¾LO
+1690   5                      }
+1691   4                  }
+1692   3              }
+1693   2              else
+1694   2              {
+1695   3                  if(TimeCcB>(3*ONES))
+1696   3                  {
+1697   4                      swWorkStateB=OPT_STATE_IDLE;
+1698   4                      ClearWorkDoJob(0x02);
+1699   4                      CT2_C=0;
+1700   4                      Delay(FA_RA);
+1701   4                  }
+1702   3              }
+1703   2              if(((KeyBut==START_SW)||(KeyBut==CLEAR_SW))&&(KeyFlag==0))//±íÊ¾
+1704   2              {
+1705   3                  KeyFlagB=1;
+1706   3              }
+1707   2              else if((KeyFlagB==1)&&(KeyBut==0))
+1708   2              {
+1709   3                  swWorkStateB=OPT_STATE_IDLE;
+1710   3                  ClearWorkDoJob(0x02);
+1711   3                  CT2_C=0;
+1712   3                  Delay(FA_RA);
+1713   3              }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 29  
+
+1714   2              else if(KeyBut==0)
+1715   2              {
+1716   3                  KeyFlagB=0;
+1717   3              }
+1718   2              break;
+1719   2          case OPT_STATE_CLERB://±íÊ¾Çå¿ÕìÒÌå
+1720   2              //Çå¿ÕìÒÌåÊ±¼ä
+1721   2              if((CheckKeyB()==CLEAR_SW)&&(KeyFlagB==0)&&(TimeCcB>(2*ONES)))//±íÊ¾Çå½à
+1722   2              {
+1723   3                  swWorkStateB=OPT_STATE_IDLE;
+1724   3                  ClearWorkDoJob(0x02);
+1725   3                  CT2_C=0;
+1726   3                  CT2_S=0;//¹Ø±Õ²¹Ë®
+1727   3                  Delay(FA_RA);
+1728   3                  HeatFlagB=1;
+1729   3                  KeyFlagB=0xBB;
+1730   3              }
+1731   2              else if(CheckKeyB()==0)
+1732   2              {
+1733   3                  KeyFlagB=0;
+1734   3                  TimeCcB=0;
+1735   3              }
+1736   2              if(MkCafeTimeB>(10*ONES))
+1737   2              {
+1738   3                  CT2_S=0;//Æô¶¯²¹Ë®
+1739   3                  MkCafeTimeB=0;
+1740   3              }
+1741   2              break;
+1742   2          case OPT_STATE_SHEAD1://ÉèÖÃÎÂ¶È¼ÓÈÈÖµ1
+1743   2              if(CheckKeyB()==ADD_SW)//±íÊ¾
+1744   2              {
+1745   3                  if(Temp1B<STMPMAX)
+1746   3                      Temp1B++;
+1747   3                  DisplayB(0x0D,Temp1B/10,Temp1B%10,0x25);//Ë¢ÐÂÊý¾Ý
+1748   3                  Delay(100);
+1749   3                  KeyTimeB=0;
+1750   3              }
+1751   2              else if(CheckKeyB()==SUB_SW)//±íÊ¾
+1752   2              {
+1753   3                  if(Temp1B>STMPMIN)
+1754   3                      Temp1B--;
+1755   3                  DisplayB(0x0D,Temp1B/10,Temp1B%10,0x25);//Ë¢ÐÂÊý¾Ý
+1756   3                  Delay(100);
+1757   3                  KeyTimeB=0;
+1758   3              }
+1759   2              else if(CheckKeyB()==TMP1_SW)//±íÊ¾
+1760   2              {
+1761   3                  KeyTimeB++;
+1762   3                  if(KeyTimeB>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1763   3                  {
+1764   4                      //±£´æÊý¾Ý
+1765   4                      WriteTmp1BEeprom();
+1766   4                      swWorkStateB=OPT_STATE_IDLE;
+1767   4                      HeatFlagB=1;
+1768   4                      KeyTimeB=0;
+1769   4                      DisplayB(0x0D,Temp1B/10,Temp1B%10,0x16);//Ë¢ÐÂÊý¾Ý
+1770   4                      TimeCcB=0;
+1771   4                  }
+1772   3              }
+1773   2              else
+1774   2              {
+1775   3                  if(TimeCcB>(0.8*ONES))
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 30  
+
+1776   3                  {
+1777   4                      TimeCcB=0;
+1778   4                      if(LedOnOFFB==0x21)
+1779   4                      {
+1780   5                          LedOnOFFB=0x25;
+1781   5                      }
+1782   4                      else
+1783   4                      {
+1784   5                          LedOnOFFB=0x21;
+1785   5                      }
+1786   4                      DisplayB(0x0D,Temp1B/10,Temp1B%10,LedOnOFFB);
+1787   4                  }
+1788   3      
+1789   3              }
+1790   2              break;
+1791   2          case OPT_STATE_SHEAD2://ÉèÖÃÎÂ¶È¼ÓÈÈÖµ2
+1792   2              if(CheckKeyB()==ADD_SW)//±íÊ¾
+1793   2              {
+1794   3                  if(Temp2B<STMPMAX)
+1795   3                      Temp2B++;
+1796   3                  DisplayB(0x0D,Temp2B/10,Temp2B%10,0x29);//Ë¢ÐÂÊý¾Ý
+1797   3                  KeyTimeB=0;
+1798   3                  Delay(100);
+1799   3              }
+1800   2              else if(CheckKeyB()==SUB_SW)//±íÊ¾
+1801   2              {
+1802   3                  if(Temp2B>STMPMIN)
+1803   3                      Temp2B--;
+1804   3                  DisplayB(0x0D,Temp2B/10,Temp2B%10,0x29);//Ë¢ÐÂÊý¾Ý
+1805   3                  KeyTimeB=0;
+1806   3                  Delay(100);
+1807   3              }
+1808   2              else if(CheckKeyB()==TMP2_SW)//±íÊ¾
+1809   2              {
+1810   3                  KeyTimeB++;
+1811   3                  if(KeyTimeB>20)//±íÊ¾³¤°´ ÉèÖÃÎÂ¶È1Öµ
+1812   3                  {
+1813   4                      //±£´æÊý¾Ý
+1814   4                      WriteTmp2BEeprom();
+1815   4                      swWorkStateB=OPT_STATE_IDLE;
+1816   4                      HeatFlagB=1;
+1817   4                      KeyTimeB=0;
+1818   4                      DisplayB(0x0D,Temp2B/10,Temp2B%10,0x1A);//Ë¢ÐÂÊý¾Ý
+1819   4                      TimeCcB=0;
+1820   4                  }
+1821   3              }
+1822   2              else
+1823   2              {
+1824   3                  if(TimeCcB>(0.8*ONES))
+1825   3                  {
+1826   4                      TimeCcB=0;
+1827   4                      if(LedOnOFFB==0x21)
+1828   4                      {
+1829   5                          LedOnOFFB=0x29;
+1830   5                      }
+1831   4                      else
+1832   4                      {
+1833   5                          LedOnOFFB=0x21;
+1834   5                      }
+1835   4                      DisplayB(0x0D,Temp2B/10,Temp2B%10,LedOnOFFB);
+1836   4                  }
+1837   3              }
+C51 COMPILER V9.54   MAIN                                                                  01/27/2021 14:40:19 PAGE 31  
+
+1838   2              break;
+1839   2          case OPT_STATE_ERR1://²»¿É»Ö¸´´íÎó ²¹Ë®Ê§°Ü ³¬¹ý2·ÖÖÓ
+1840   2              HeatFlagB=0;
+1841   2              CT2_C=0;
+1842   2              CT2_Z=0;
+1843   2              CT2_S=0;
+1844   2              break;
+1845   2          default:
+1846   2              swWorkStateB=OPT_STATE_INIT;
+1847   2              break;
+1848   2      
+1849   2          }
+1850   1      }
+1851          
+1852          
+1853          
+1854          
+1855          
+1856          extern void TIMER0_initialize(void);
+1857          void main(void)
+1858          {
+1859   1          LVC=0x20;
+1860   1          GPIO_Init();
+1861   1          TIMER0_initialize();
+1862   1          WDTR_Init();
+1863   1          ADC_Init();
+1864   1          EA = 1;
+1865   1          SDA=1;
+1866   1          ReadTmp1Eeprom();
+1867   1          ReadTmp2Eeprom();
+1868   1          ReadTmp1BEeprom();
+1869   1          ReadTmp2BEeprom();
+1870   1          Display(0x0E,0x0E,0x0E,0xFF); //0x10 START  0x02 CLEAR 0x04 TMP1 0x08 TMP2
+1871   1          DisplayB(0x0E,0x0E,0x0E,0xFF);
+1872   1          while(1)
+1873   1          {
+1874   2              TemControlAuto();
+1875   2              TemControlAutoB();
+1876   2              ProWorkState();
+1877   2              ProWorkStateB();
+1878   2              WDTR_CountClear();
+1879   2              Delay(20);
+1880   2          }
+1881   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   6169    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =     26      14
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     70      23
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      4    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,8 @@
+"STARTUP_OB38R08T1.obj",
+"ADC.obj",
+"EEPROM.obj",
+"Main.obj",
+"Timer.obj",
+"WDT.obj" 
+TO "CRM1227" 
+RAMSIZE(256) 
